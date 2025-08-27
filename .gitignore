@@ -96,5 +96,28 @@ multirun
 # Data
 data/*/*
 
-# Notebooks
-notebooks/*
+# ↓↓↓ mantém notebooks .ipynb, mas ignora “lixos”
+.notebook_cache/
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+*.pyc
+__pycache__/
+.DS_Store
+
+# ambientes
+.venv/
+env/
+venv/
+
+# dados grandes/sensíveis
+data/
+*.csv
+*.parquet
+*.feather
+*.pkl
+*.db
+*.sqlite
+
+# segredos
+*.env
+.env.*
