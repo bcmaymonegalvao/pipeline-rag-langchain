@@ -1,0 +1,44 @@
+[global]
+# Configurações globais do Streamlit
+developmentMode = false
+logLevel = "info"
+unitTest = false
+
+[server]
+# Configurações do servidor
+port = 8501
+enableCORS = false
+enableXsrfProtection = true
+maxUploadSize = 200
+headless = false
+runOnSave = false
+
+[browser]
+# Configurações do navegador
+serverAddress = "localhost"
+gatherUsageStats = false
+serverPort = 8501
+
+[theme]
+# Tema customizado
+primaryColor = "#6c5ce7"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+font = "sans serif"
+
+[runner]
+# Configurações de execução
+magicEnabled = true
+installTracer = false
+fixMatplotlib = true
+
+[client]
+# Configurações do cliente
+caching = true
+displayEnabled = true
+showErrorDetails = true
+
+[mapbox]
+# Token do Mapbox (se necessário para mapas)
+token = ""
