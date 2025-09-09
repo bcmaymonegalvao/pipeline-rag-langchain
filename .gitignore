@@ -121,3 +121,7 @@ data/
 # segredos
 *.env
 .env.*
+
+# Model caches
+models_cache/
+*.safetensors
