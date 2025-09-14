@@ -123,6 +123,33 @@ def get_system_stats():
         "total_docs": total_docs,
     }
 
+def check_system_safety():
+    """
+    Verifica se os recursos do sistema estão dentro de limites seguros.
+    Retorna um dicionário com status de segurança e métricas.
+    """
+    stats = get_system_stats()
+    
+    # Limites de segurança (ajustáveis)
+    RAM_USAGE_THRESHOLD = 0.85  # 85% de uso de RAM
+    FAISS_SIZE_THRESHOLD_GB = 8.0  # 8 GB máximo para FAISS
+    
+    current_ram_used_gb = stats["ram_used"]
+    total_ram_gb = stats["ram_total"]
+    ram_usage_pct = current_ram_used_gb / total_ram_gb if total_ram_gb > 0 else 0
+    
+    faiss_size_gb = stats["faiss_size_mb"] / 1024  # Converter MB para GB
+    
+    return {
+        "current_ram_used_gb": current_ram_used_gb,
+        "total_ram_gb": total_ram_gb,
+        "ram_usage_pct": ram_usage_pct,
+        "faiss_size_gb": faiss_size_gb,
+        "current_ram_safe": ram_usage_pct < RAM_USAGE_THRESHOLD,
+        "faiss_size_safe": faiss_size_gb < FAISS_SIZE_THRESHOLD_GB,
+        "overall_safe": ram_usage_pct < RAM_USAGE_THRESHOLD and faiss_size_gb < FAISS_SIZE_THRESHOLD_GB
+    }
+
 def get_theoretical_limits():
     """Retorna limites teóricos baseados em configurações e hardware"""
     # Valores de exemplo, ajustar conforme necessidade real
@@ -567,7 +594,7 @@ def manage_documents_page():
                         
                         # Verificação contínua de recursos
                         current_safety = check_system_safety()
-                        if current_safety['current_ram_safe'] == False:
+                        if not current_safety['current_ram_safe']:
                             st.error("⛔ Recursos críticos! Interrompendo processamento.")
                             break
                         
