@@ -527,7 +527,6 @@ def manage_documents_page():
     st.markdown("Os documentos serão processados automaticamente e adicionados ao índice FAISS.")
     
     
-    st.markdown('<div class="upload-card">', unsafe_allow_html=True)
     
     uploaded_files = st.file_uploader(
     "Selecione arquivos PDF:",
@@ -535,7 +534,7 @@ def manage_documents_page():
     accept_multiple_files=True,
     help="Você pode selecionar múltiplos arquivos PDF para upload simultâneo."
     )
-    
+    st.markdown('<div class="upload-card">', unsafe_allow_html=True)   
     st.markdown('</div>', unsafe_allow_html=True)
     
     if uploaded_files:
