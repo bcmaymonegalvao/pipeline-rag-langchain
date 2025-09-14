@@ -528,12 +528,12 @@ def manage_documents_page():
     
     
     st.markdown('<div class="upload-card">', unsafe_allow_html=True)
-            uploaded_files = st.file_uploader(
-            "Selecione arquivos PDF:",
-            type=['pdf'],
-            accept_multiple_files=True,
-            help="Você pode selecionar múltiplos arquivos PDF para upload simultâneo."
-        )
+    uploaded_files = st.file_uploader(
+    "Selecione arquivos PDF:",
+    type=['pdf'],
+    accept_multiple_files=True,
+    help="Você pode selecionar múltiplos arquivos PDF para upload simultâneo."
+    )
     st.markdown('</div>', unsafe_allow_html=True)
     if uploaded_files:
         st.markdown(f"**{len(uploaded_files)} arquivo(s) selecionado(s)**")
