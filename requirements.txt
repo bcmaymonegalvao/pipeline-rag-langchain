@@ -1,21 +1,39 @@
-0
+# Core dependencies
+streamlit>=1.28.0
 
-# Vector stores and search
+# Machine Learning and AI
+torch>=2.0.0
+transformers>=4.30.0
+sentence-transformers>=2.2.0
+torch-audio>=2.0.0
+
+# LangChain ecosystem
+langchain>=0.1.0
+langchain-community>=0.0.20
+langchain-core>=0.1.0
+
+# Vector store and embeddings
 faiss-cpu>=1.7.4
 
+# HuggingFace integrations
+huggingface-hub>=0.16.0
+
 # Document processing
-pypdf>=3.17.0
+pypdf>=3.0.0
 PyPDF2>=3.0.0
 
 # Utility libraries
 numpy>=1.24.0
 pandas>=2.0.0
-python-dotenv>=1.0.0
+requests>=2.31.0
+pathlib2>=2.3.7
+
+# Additional dependencies that might be needed
+accelerate>=0.20.0
+safetensors>=0.3.0
+tokenizers>=0.13.0
+regex>=2023.0.0
+tqdm>=4.65.0
+
+# Optional: for better performance
 psutil>=5.9.0
-
-# Optional: GPU support (uncomment if needed)
-# faiss-gpu>=1.7.4
-
-# Development dependencies (optional)
-# jupyter>=1.0.0
-# notebook>=6.5.0
