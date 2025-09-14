@@ -523,18 +523,18 @@ def manage_documents_page():
     # Seção de upload
     st.header("📤 Upload de Documentos")
     
-    st.markdown('<div class="upload-card">', unsafe_allow_html=True)
     st.markdown("**📄 Adicione arquivos PDF para expandir a base de conhecimento**")
     st.markdown("Os documentos serão processados automaticamente e adicionados ao índice FAISS.")
+    
+    
+    st.markdown('<div class="upload-card">', unsafe_allow_html=True)
+            uploaded_files = st.file_uploader(
+            "Selecione arquivos PDF:",
+            type=['pdf'],
+            accept_multiple_files=True,
+            help="Você pode selecionar múltiplos arquivos PDF para upload simultâneo."
+        )
     st.markdown('</div>', unsafe_allow_html=True)
-    
-    uploaded_files = st.file_uploader(
-        "Selecione arquivos PDF:",
-        type=['pdf'],
-        accept_multiple_files=True,
-        help="Você pode selecionar múltiplos arquivos PDF para upload simultâneo."
-    )
-    
     if uploaded_files:
         st.markdown(f"**{len(uploaded_files)} arquivo(s) selecionado(s)**")
         
