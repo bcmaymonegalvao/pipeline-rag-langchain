@@ -65,21 +65,6 @@ st.markdown("""
         margin: 1rem 0;
         box-shadow: 0 4px 15px 0 rgba(31, 38, 135, 0.37);
     }
-    .upload-card {
-        background: #f8f9fa;
-        border: 2px dashed #6c5ce7;
-        padding: 1.5rem;
-        border-radius: 10px;
-        text-align: center;
-        margin: 1rem 0;
-        box-sizing: border-box;
-        max-width: 100%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 140px;
-    }
-
     .container-border {
         border: 1.5px solid #6c5ce7;
         border-radius: 10px;
@@ -475,7 +460,7 @@ def chat_page():
             st.warning("⚠️ Por favor, digite uma pergunta antes de buscar!")
     
     with col2:
-        st.markdown('<div class="container-border">', unsafe_allow_html=True)
+    st.markdown('<div class="container-border">', unsafe_allow_html=True)
         st.header("📈 Estatísticas")
         
         # Métricas
@@ -527,15 +512,14 @@ def manage_documents_page():
     st.markdown("Os documentos serão processados automaticamente e adicionados ao índice FAISS.")
     
     
-    
+    #st.markdown('<div class="upload-card">', unsafe_allow_html=True)   
     uploaded_files = st.file_uploader(
     "Selecione arquivos PDF:",
     type=['pdf'],
     accept_multiple_files=True,
     help="Você pode selecionar múltiplos arquivos PDF para upload simultâneo."
     )
-    st.markdown('<div class="upload-card">', unsafe_allow_html=True)   
-    st.markdown('</div>', unsafe_allow_html=True)
+    #st.markdown('</div>', unsafe_allow_html=True)
     
     if uploaded_files:
         st.markdown(f"**{len(uploaded_files)} arquivo(s) selecionado(s)**")
