@@ -8,10 +8,6 @@ from pathlib import Path
 from typing import List, Dict, Any
 import logging
 
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 # Configuração da página
 st.set_page_config(
     page_title="🚀 Pipeline RAG LangChain",
@@ -19,6 +15,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # CSS personalizado (mantendo o estilo original)
 st.markdown("""
