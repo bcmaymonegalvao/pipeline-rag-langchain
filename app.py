@@ -492,14 +492,19 @@ def manage_documents_page():
                 all_new_docs = []
                 new_texts = []
                 
-                # Processa cada arquivo
+                # Processa cada arquivo com segurança
                 for i, uploaded_file in enumerate(uploaded_files):
                     status_text.text(f"📄 Processando {uploaded_file.name}...")
                     progress_bar.progress((i + 0.5) / len(uploaded_files))
                     
                     try:
-                        docs = process_pdf(uploaded_file)
+                        docs, warnings = process_pdf_safely(uploaded_file, max_chunks_per_file=200)
                         all_new_docs.extend(docs)
+                        
+                        # Mostra alertas específicos do arquivo
+                        for warning in warnings:
+                            if "⚠️" in warning:
+                                st.warning(f"{uploaded_file.name}: {warning}")
                         
                         # Extrai textos dos documentos
                         for doc in docs:
@@ -507,6 +512,12 @@ def manage_documents_page():
                         
                         st.markdown(f'<div class="success-card">✅ {uploaded_file.name}: {len(docs)} chunks extraídos</div>', 
                                   unsafe_allow_html=True)
+                        
+                        # Verificação contínua de recursos
+                        current_safety = check_system_safety()
+                        if current_safety['current_ram_safe'] == False:
+                            st.error("⛔ Recursos críticos! Interrompendo processamento.")
+                            break
                         
                     except Exception as e:
                         st.markdown(f'<div class="warning-card">❌ Erro ao processar {uploaded_file.name}: {e}</div>', 
@@ -557,22 +568,50 @@ def manage_documents_page():
     st.markdown("---")
     st.header("📊 Informações da Base Atual")
     
+    stats = get_system_stats()
+    limits = get_theoretical_limits()
+    
     col1, col2, col3 = st.columns(3)
     
     with col1:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.markdown(f"**📄 Documentos**\n{len(st.session_state.docs)}")
+        st.markdown(f"**📄 Documentos**\n{stats['total_docs']:,}")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.markdown("**🔢 Dimensão**\n384 vetores")
+        st.markdown(f"**🔢 Vetores**\n{stats['total_vectors']:,}")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col3:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.markdown("**🗃️ Índice**\nFAISS")
+        st.markdown(f"**💾 FAISS**\n{stats['faiss_size_mb']:.1f} MB")
         st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Informações de recursos do sistema
+    st.header("🔧 Recursos do Sistema")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**💾 Memória RAM:**")
+        ram_usage = (stats['ram_used'] / stats['ram_total']) * 100
+        st.progress(ram_usage / 100)
+        st.markdown(f"**{stats['ram_used']:.1f} GB** / {stats['ram_total']:.1f} GB ({ram_usage:.1f}%)")
+        
+        if ram_usage > 80:
+            st.warning("⚠️ Uso alto de memória!")
+        elif ram_usage > 60:
+            st.info("ℹ️ Uso moderado de memória")
+        else:
+            st.success("✅ Uso normal de memória")
+    
+    with col2:
+        st.markdown("**📈 Limites Teóricos:**")
+        st.info(f"🔢 **Max. Vetores:** {limits['max_vectors_ram']:,}")
+        st.info(f"📄 **Max. Documentos:** {limits['max_docs_estimate']:,}")
+        st.info(f"💾 **Max. FAISS:** {limits['max_faiss_size_gb']:.1f} GB")
+        st.info(f"📝 **Context Window:** {limits['max_context_tokens']} tokens")
     
     # Teste da base de conhecimento
     st.header("🔍 Testar Base de Conhecimento")
