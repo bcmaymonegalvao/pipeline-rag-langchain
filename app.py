@@ -153,6 +153,25 @@ def get_default_docs():
         "Business Intelligence (BI) envolve estratégias e tecnologias para análise de informações de negócios e suporte à tomada de decisão."
     ]
 
+def process_pdf_safely(uploaded_file, max_chunks_per_file=200):
+    """
+    Processa um arquivo PDF com segurança limitando número de chunks e captura warnings.
+    Retorna uma tupla (lista de docs, lista de warnings).
+    """
+    warnings = []
+    docs = []
+    try:
+        loaded_docs = process_pdf(uploaded_file)
+        if len(loaded_docs) > max_chunks_per_file:
+            warnings.append(f"⚠️ Arquivo muito grande, cortado para {max_chunks_per_file} chunks")
+            docs = loaded_docs[:max_chunks_per_file]
+        else:
+            docs = loaded_docs
+    except Exception as e:
+        warnings.append(f"⚠️ Erro ao processar PDF: {str(e)}")
+        docs = []
+    return docs, warnings
+
 @st.cache_resource(show_spinner=False)
 def initialize_rag_pipeline(custom_docs=None):
     """Inicializa o pipeline RAG com cache para otimizar performance"""
