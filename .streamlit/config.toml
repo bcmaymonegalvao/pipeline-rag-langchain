@@ -1,7 +1,17 @@
 [server]
-enableCORS = true
-enableXsrfProtection = true
-headless = true
+maxUploadSize = 200
+enableCORS = false
+enableXsrfProtection = false
 
-[browser]
-gatherUsageStats = false
+[runner]
+magicEnabled = false
+
+[client]
+caching = true
+displayEnabled = true
+
+[theme]
+primaryColor = "#6c5ce7"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#262730"
