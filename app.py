@@ -65,15 +65,30 @@ st.markdown("""
         margin: 1rem 0;
         box-shadow: 0 4px 15px 0 rgba(31, 38, 135, 0.37);
     }
-    
     .upload-card {
         background: #f8f9fa;
         border: 2px dashed #6c5ce7;
-        padding: 2rem;
+        padding: 1.5rem;
         border-radius: 10px;
         text-align: center;
         margin: 1rem 0;
+        box-sizing: border-box;
+        max-width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 140px;
     }
+
+    .container-border {
+        border: 1.5px solid #6c5ce7;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 8px rgba(108, 92, 231, 0.3);
+        background-color: white;
+    }
+    
     
     .success-card {
         background: linear-gradient(135deg, #00b894 0%, #00a085 100%);
@@ -460,6 +475,7 @@ def chat_page():
             st.warning("⚠️ Por favor, digite uma pergunta antes de buscar!")
     
     with col2:
+        st.markdown('<div class="container-border">', unsafe_allow_html=True)
         st.header("📈 Estatísticas")
         
         # Métricas
@@ -483,7 +499,8 @@ def chat_page():
         with st.expander("👁️ Ver documentos"):
             for i, doc in enumerate(st.session_state.docs, 1):
                 st.markdown(f"**{i}.** {doc[:100]}...")
-    
+    st.markdown('</div>', unsafe_allow_html=True)
+
     # Histórico de perguntas
     if 'query_history' in st.session_state and st.session_state.query_history:
         st.header("📋 Histórico de Perguntas")
