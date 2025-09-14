@@ -1,3 +1,4 @@
+import psutil
 import streamlit as st
 import time
 import os
@@ -105,6 +106,46 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+def get_system_stats():
+    """Retorna estatísticas básicas do sistema para exibição"""
+    ram = psutil.virtual_memory()
+    faiss_size_mb = 0
+    total_vectors = 0
+    total_docs = len(st.session_state.docs) if 'docs' in st.session_state else 0
+
+    # Se possível, obter tamanho do índice FAISS salvo em MB (se existir)
+    if 'vectorstore' in st.session_state and st.session_state.vectorstore is not None:
+        try:
+            faiss_index = st.session_state.vectorstore.index
+            # Para evitar erro, pegar tamanho do índice na memória ou arquivo salvo aqui (simplificado)
+            faiss_size_mb = faiss_index.ntotal * 4 / (1024*1024)  # Aproximação
+            total_vectors = faiss_index.ntotal
+        except:
+            pass
+
+    return {
+        "ram_used": ram.used / (1024**3),
+        "ram_total": ram.total / (1024**3),
+        "faiss_size_mb": faiss_size_mb,
+        "total_vectors": total_vectors,
+        "total_docs": total_docs,
+    }
+
+def get_theoretical_limits():
+    """Retorna limites teóricos baseados em configurações e hardware"""
+    # Valores de exemplo, ajustar conforme necessidade real
+    max_vectors_ram = 1000000
+    max_docs_estimate = 20000
+    max_faiss_size_gb = 10.0
+    max_context_tokens = 2048
+
+    return {
+        "max_vectors_ram": max_vectors_ram,
+        "max_docs_estimate": max_docs_estimate,
+        "max_faiss_size_gb": max_faiss_size_gb,
+        "max_context_tokens": max_context_tokens,
+    }
 
 def get_default_docs():
     """Retorna os documentos padrão"""
