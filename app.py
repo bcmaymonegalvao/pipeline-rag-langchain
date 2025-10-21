@@ -20,7 +20,7 @@ st.set_page_config(
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# CSS personalizado (mantendo o estilo original)
+# CSS personalizado
 st.markdown("""
 <style>
     .main-header {
@@ -81,20 +81,6 @@ st.markdown("""
         border-radius: 10px;
         margin: 1rem 0;
     }
-    
-    .stAlert {
-        border-radius: 10px;
-    }
-    
-    .nav-button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        border: none;
-        margin: 0.25rem;
-        font-weight: bold;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -105,15 +91,14 @@ def get_system_stats():
     total_vectors = 0
     total_docs = len(st.session_state.docs) if 'docs' in st.session_state else 0
 
-    # Se possível, obter tamanho do índice FAISS salvo em MB (se existir)
+    # Obter tamanho do índice FAISS se existir
     if 'vectorstore' in st.session_state and st.session_state.vectorstore is not None:
         try:
             faiss_index = st.session_state.vectorstore.index
-            # Para evitar erro, pegar tamanho do índice na memória ou arquivo salvo aqui (simplificado)
-            faiss_size_mb = faiss_index.ntotal * 4 / (1024*1024)  # Aproximação
+            faiss_size_mb = faiss_index.ntotal * 4 / (1024*1024)
             total_vectors = faiss_index.ntotal
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Erro ao obter tamanho FAISS: {e}")
 
     return {
         "ram_used": ram.used / (1024**3),
@@ -130,15 +115,14 @@ def check_system_safety():
     """
     stats = get_system_stats()
     
-    # Limites de segurança (ajustáveis)
-    RAM_USAGE_THRESHOLD = 0.85  # 85% de uso de RAM
-    FAISS_SIZE_THRESHOLD_GB = 8.0  # 8 GB máximo para FAISS
+    RAM_USAGE_THRESHOLD = 0.85
+    FAISS_SIZE_THRESHOLD_GB = 8.0
     
     current_ram_used_gb = stats["ram_used"]
     total_ram_gb = stats["ram_total"]
     ram_usage_pct = current_ram_used_gb / total_ram_gb if total_ram_gb > 0 else 0
     
-    faiss_size_gb = stats["faiss_size_mb"] / 1024  # Converter MB para GB
+    faiss_size_gb = stats["faiss_size_mb"] / 1024
     
     return {
         "current_ram_used_gb": current_ram_used_gb,
@@ -152,17 +136,11 @@ def check_system_safety():
 
 def get_theoretical_limits():
     """Retorna limites teóricos baseados em configurações e hardware"""
-    # Valores de exemplo, ajustar conforme necessidade real
-    max_vectors_ram = 1000000
-    max_docs_estimate = 20000
-    max_faiss_size_gb = 10.0
-    max_context_tokens = 2048
-
     return {
-        "max_vectors_ram": max_vectors_ram,
-        "max_docs_estimate": max_docs_estimate,
-        "max_faiss_size_gb": max_faiss_size_gb,
-        "max_context_tokens": max_context_tokens,
+        "max_vectors_ram": 1000000,
+        "max_docs_estimate": 20000,
+        "max_faiss_size_gb": 10.0,
+        "max_context_tokens": 2048,
     }
 
 def get_default_docs():
@@ -180,9 +158,42 @@ def get_default_docs():
         "Business Intelligence (BI) envolve estratégias e tecnologias para análise de informações de negócios e suporte à tomada de decisão."
     ]
 
+def process_pdf(uploaded_file):
+    """Processa um arquivo PDF e extrai o texto"""
+    tmp_file_path = None
+    try:
+        from langchain_community.document_loaders import PyPDFLoader
+        from langchain.text_splitter import RecursiveCharacterTextSplitter
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_file_path = tmp_file.name
+        
+        loader = PyPDFLoader(tmp_file_path)
+        pages = loader.load()
+        
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            length_function=len,
+        )
+        
+        docs = text_splitter.split_documents(pages)
+        return docs
+        
+    except Exception as e:
+        logger.error(f"Erro ao processar PDF: {e}")
+        raise e
+    finally:
+        if tmp_file_path and os.path.exists(tmp_file_path):
+            try:
+                os.unlink(tmp_file_path)
+            except Exception as e:
+                logger.warning(f"Erro ao deletar arquivo temporário: {e}")
+
 def process_pdf_safely(uploaded_file, max_chunks_per_file=200):
     """
-    Processa um arquivo PDF com segurança limitando número de chunks e captura warnings.
+    Processa um arquivo PDF com segurança limitando número de chunks.
     Retorna uma tupla (lista de docs, lista de warnings).
     """
     warnings = []
@@ -198,121 +209,6 @@ def process_pdf_safely(uploaded_file, max_chunks_per_file=200):
         warnings.append(f"⚠️ Erro ao processar PDF: {str(e)}")
         docs = []
     return docs, warnings
-
-@st.cache_resource(show_spinner=False)
-def initialize_rag_pipeline(custom_docs=None):
-    """Inicializa o pipeline RAG com cache para otimizar performance"""
-    try:
-        with st.spinner("🔧 Inicializando pipeline RAG..."):
-            # Importações necessárias - ordem correta
-            import torch
-            from sentence_transformers import SentenceTransformer
-            from langchain_community.embeddings import HuggingFaceEmbeddings
-            from langchain_community.vectorstores import FAISS
-            from langchain.chains import RetrievalQA
-            
-            # Importar transformers por último para evitar conflitos
-            from transformers import (
-                AutoTokenizer, 
-                AutoModelForSeq2SeqLM, 
-                pipeline as hf_pipeline  # Renomear para evitar conflito
-            )
-            from langchain_community.llms import HuggingFacePipeline
-            
-            # Usar documentos customizados ou padrão
-            docs = custom_docs if custom_docs else get_default_docs()
-            
-            # Configurar embeddings
-            st.info("📊 Carregando modelo de embeddings MiniLM...")
-            embeddings = HuggingFaceEmbeddings(
-                model_name="sentence-transformers/all-MiniLM-L6-v2",
-                model_kwargs={'device': 'cpu'},
-                encode_kwargs={'normalize_embeddings': True}
-            )
-            
-            # Criar índice FAISS
-            st.info("🗃️ Construindo índice vetorial FAISS...")
-            vectorstore = FAISS.from_texts(docs, embeddings)
-            
-            # Configurar retriever
-            retriever = vectorstore.as_retriever(
-                search_type="similarity",
-                search_kwargs={"k": 3}  # Aumentamos para 3 para mais contexto
-            )
-            
-            # Configurar LLM local
-            st.info("🤖 Carregando modelo FLAN-T5...")
-            model_name = "google/flan-t5-base"
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-            
-            gen_pipeline = hf_pipeline(
-                "text2text-generation",
-                model=model,
-                tokenizer=tokenizer,
-                max_new_tokens=512,
-                temperature=0.7,
-                do_sample=True,
-                repetition_penalty=1.1
-            )
-            
-            llm = HuggingFacePipeline(pipeline=gen_pipeline)
-            
-            # Criar chain RAG
-            st.info("🔗 Configurando chain RAG...")
-            qa_chain = RetrievalQA.from_chain_type(
-                llm=llm,
-                chain_type="stuff",
-                retriever=retriever,
-                return_source_documents=True,  # Para mostrar fontes
-                verbose=False
-            )
-            
-            st.success("✅ Pipeline RAG inicializado com sucesso!")
-            
-            return qa_chain, vectorstore, docs, retriever, embeddings
-            
-    except Exception as e:
-        st.error(f"❌ Erro ao inicializar pipeline: {str(e)}")
-        logger.error(f"Erro na inicialização: {e}")
-        return None, None, None, None, None
-
-def process_pdf(uploaded_file):
-    """Processa um arquivo PDF e extrai o texto"""
-    try:
-        from langchain_community.document_loaders import PyPDFLoader
-        from langchain.text_splitter import RecursiveCharacterTextSplitter
-        
-        # Salva o arquivo temporariamente
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            tmp_file_path = tmp_file.name
-        
-        # Carrega e processa o PDF
-        loader = PyPDFLoader(tmp_file_path)
-        pages = loader.load()
-        
-        # Divide o texto em chunks
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
-        )
-        
-        docs = text_splitter.split_documents(pages)
-        
-        # Remove arquivo temporário
-        os.unlink(tmp_file_path)
-        
-        return docs
-        
-    except Exception as e:
-        if 'tmp_file_path' in locals():
-            try:
-                os.unlink(tmp_file_path)
-            except:
-                pass
-        raise e
 
 def save_custom_docs(docs_list):
     """Salva a lista de documentos customizados"""
@@ -345,29 +241,87 @@ def format_response(response_data: Dict[str, Any]) -> tuple:
         answer = str(response_data)
         source_docs = []
     
-    # Limpar resposta
     answer = answer.strip()
     if not answer or answer.lower() in ["", "none", "null"]:
         answer = "Desculpe, não consegui gerar uma resposta adequada para sua pergunta."
     
     return answer, source_docs
 
+@st.cache_resource(show_spinner=False)
+def initialize_rag_pipeline(custom_docs=None):
+    """Inicializa o pipeline RAG com cache para otimizar performance"""
+    try:
+        with st.spinner("🔧 Inicializando pipeline RAG..."):
+            from sentence_transformers import SentenceTransformer
+            from langchain_community.embeddings import HuggingFaceEmbeddings
+            from langchain_community.vectorstores import FAISS
+            from langchain.chains import RetrievalQA
+            from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline as hf_pipeline
+            from langchain_community.llms import HuggingFacePipeline
+            
+            docs = custom_docs if custom_docs else get_default_docs()
+            
+            st.info("📊 Carregando modelo de embeddings MiniLM...")
+            embeddings = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/all-MiniLM-L6-v2",
+                model_kwargs={'device': 'cpu'},
+                encode_kwargs={'normalize_embeddings': True}
+            )
+            
+            st.info("🗃️ Construindo índice vetorial FAISS...")
+            vectorstore = FAISS.from_texts(docs, embeddings)
+            
+            retriever = vectorstore.as_retriever(
+                search_type="similarity",
+                search_kwargs={"k": 3}
+            )
+            
+            st.info("🤖 Carregando modelo FLAN-T5...")
+            model_name = "google/flan-t5-base"
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+            
+            gen_pipeline = hf_pipeline(
+                "text2text-generation",
+                model=model,
+                tokenizer=tokenizer,
+                max_new_tokens=512,
+                temperature=0.7,
+                do_sample=True,
+                repetition_penalty=1.1
+            )
+            
+            llm = HuggingFacePipeline(pipeline=gen_pipeline)
+            
+            st.info("🔗 Configurando chain RAG...")
+            qa_chain = RetrievalQA.from_chain_type(
+                llm=llm,
+                chain_type="stuff",
+                retriever=retriever,
+                return_source_documents=True,
+                verbose=False
+            )
+            
+            st.success("✅ Pipeline RAG inicializado com sucesso!")
+            return qa_chain, vectorstore, docs, retriever, embeddings
+            
+    except Exception as e:
+        st.error(f"❌ Erro ao inicializar pipeline: {str(e)}")
+        logger.error(f"Erro na inicialização: {e}")
+        return None, None, None, None, None
+
 def show_sidebar():
     """Mostra a sidebar com informações do sistema"""
     with st.sidebar:
         st.header("📍 Navegação")
         
-        # Botões de navegação estilizados
-        page_chat = st.button("🤖 Chat com IA", use_container_width=True)
-        page_manage = st.button("📚 Gerenciar Documentos", use_container_width=True)
-        
-        # Definir página ativa
-        if page_chat:
-            st.session_state.current_page = "chat"
-        elif page_manage:
-            st.session_state.current_page = "manage"
-        elif 'current_page' not in st.session_state:
-            st.session_state.current_page = "chat"
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🤖 Chat", use_container_width=True):
+                st.session_state.current_page = "chat"
+        with col2:
+            if st.button("📚 Documentos", use_container_width=True):
+                st.session_state.current_page = "manage"
         
         st.markdown("---")
         
@@ -390,84 +344,67 @@ def show_sidebar():
         st.header("📋 Como usar")
         if st.session_state.current_page == "chat":
             st.markdown("""
-            1. **Digite sua pergunta** no campo abaixo
-            2. **Clique em "Buscar Resposta"**
-            3. **Veja a resposta** e documentos fonte
-            4. **Explore diferentes temas**: IA, ML, NLP, BI
+            1. Digite sua pergunta
+            2. Clique em "Buscar Resposta"
+            3. Veja a resposta e documentos
             """)
         else:
             st.markdown("""
-            1. **Faça upload de PDFs** para expandir a base
-            2. **Processe os documentos** automaticamente
-            3. **Teste a base atualizada** com buscas
-            4. **Gerencie** sua base de conhecimento
+            1. Faça upload de PDFs
+            2. Processe os documentos
+            3. Teste a base atualizada
             """)
         
-        # Estatísticas do sistema
         st.header("📊 Sistema")
         if 'qa_chain' in st.session_state:
             st.success("🟢 Pipeline Ativo")
-            st.info(f"📄 Documentos: {len(st.session_state.docs)}")
-            st.info("🔍 Retriever: Top-3")
+            st.info(f"📄 Docs: {len(st.session_state.docs)}")
         else:
             st.warning("🟡 Inicializando...")
 
 def chat_page():
     """Página principal do chat"""
-    # Header principal
     st.markdown('<div class="main-header">🚀 Pipeline RAG LangChain</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-header">Retrieval-Augmented Generation com HuggingFace & FAISS</div>', unsafe_allow_html=True)
     
-    # Interface principal
     col1, col2 = st.columns([2, 1])
     
     with col1:
         st.header("💭 Faça sua pergunta")
         
-        # Campo de entrada da pergunta
         query = st.text_area(
             "Digite sua pergunta aqui:",
-            placeholder="Ex: O que é RAG? Como funciona machine learning? O que significa churn?",
+            placeholder="Ex: O que é RAG? Como funciona machine learning?",
             height=100,
-            help="Digite qualquer pergunta sobre IA, ML, NLP, BI ou conceitos relacionados"
+            key="chat_input"
         )
         
-        # Botões de exemplo
         st.markdown("**💡 Perguntas de exemplo:**")
         col_btn1, col_btn2, col_btn3 = st.columns(3)
         
-        with col_btn1:
-            if st.button("🔄 O que é churn?"):
-                query = "O que significa churn em análise de clientes?"
+        example_queries = [
+            ("🔄 O que é churn?", "O que significa churn em análise de clientes?"),
+            ("🤖 Como funciona RAG?", "Como funciona o pipeline de RAG?"),
+            ("📚 O que é LangChain?", "Explique o que é LangChain e para que serve.")
+        ]
         
-        with col_btn2:
-            if st.button("🤖 Como funciona RAG?"):
-                query = "Como funciona o pipeline de RAG?"
+        for i, (btn_text, query_text) in enumerate(example_queries):
+            with [col_btn1, col_btn2, col_btn3][i]:
+                if st.button(btn_text, use_container_width=True):
+                    st.session_state.chat_input = query_text
+                    st.rerun()
         
-        with col_btn3:
-            if st.button("📚 O que é LangChain?"):
-                query = "Explique o que é LangChain e para que serve."
-        
-        # Botão de busca
         search_button = st.button("🔍 Buscar Resposta", type="primary", use_container_width=True)
         
-        # Processar pergunta
         if search_button and query.strip():
             with st.spinner("🤔 Processando sua pergunta..."):
                 try:
-                    # Registrar tempo de resposta
                     start_time = time.time()
-                    
-                    # Executar RAG
                     response = st.session_state.qa_chain.invoke({"query": query})
-                    
-                    # Calcular tempo
                     response_time = time.time() - start_time
                     
-                    # Formatar resposta
                     answer, source_docs = format_response(response)
                     
-                    # Adicionar ao histórico
                     st.session_state.query_history.append({
                         "query": query,
                         "answer": answer,
@@ -475,13 +412,11 @@ def chat_page():
                         "timestamp": time.strftime("%H:%M:%S")
                     })
                     
-                    # Exibir resposta
                     st.markdown('<div class="response-card">', unsafe_allow_html=True)
                     st.markdown(f"**🤖 Resposta:**\n\n{answer}")
                     st.markdown(f"⏱️ *Tempo de resposta: {response_time:.2f}s*")
                     st.markdown('</div>', unsafe_allow_html=True)
                     
-                    # Mostrar documentos fonte
                     if source_docs:
                         st.markdown("**📄 Documentos utilizados:**")
                         for i, doc in enumerate(source_docs[:2], 1):
@@ -499,7 +434,6 @@ def chat_page():
     with col2:
         st.header("📈 Estatísticas")
         
-        # Métricas
         if 'query_history' in st.session_state and st.session_state.query_history:
             total_queries = len(st.session_state.query_history)
             avg_time = sum(q["time"] for q in st.session_state.query_history) / total_queries
@@ -513,19 +447,17 @@ def chat_page():
             st.metric("⏱️ Tempo Médio", "-")
             st.metric("🕐 Última Consulta", "-")
         
-        # Base de conhecimento
         st.header("📚 Base de Conhecimento")
         st.info(f"📄 {len(st.session_state.docs)} documentos indexados")
         
         with st.expander("👁️ Ver documentos"):
-            for i, doc in enumerate(st.session_state.docs, 1):
+            for i, doc in enumerate(st.session_state.docs[:5], 1):
                 st.markdown(f"**{i}.** {doc[:100]}...")
+            if len(st.session_state.docs) > 5:
+                st.markdown(f"*... e mais {len(st.session_state.docs) - 5} documentos*")
 
-    # Histórico de perguntas
     if 'query_history' in st.session_state and st.session_state.query_history:
         st.header("📋 Histórico de Perguntas")
-        
-        # Mostrar apenas as últimas 5 perguntas
         recent_history = st.session_state.query_history[-5:]
         
         for item in reversed(recent_history):
@@ -536,34 +468,26 @@ def chat_page():
 
 def manage_documents_page():
     """Página de gerenciamento de documentos"""
-    # Header principal
     st.markdown('<div class="main-header">📚 Gerenciar Base de Conhecimento</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-header">Adicione documentos PDF para expandir o conhecimento da IA</div>', unsafe_allow_html=True)
     
-    # Seção de upload
     st.header("📤 Upload de Documentos")
-    
     st.markdown("**📄 Adicione arquivos PDF para expandir a base de conhecimento**")
-    st.markdown("Os documentos serão processados automaticamente e adicionados ao índice FAISS.")
     
-    
-    #st.markdown('<div class="upload-card">', unsafe_allow_html=True)   
     uploaded_files = st.file_uploader(
-    "Selecione arquivos PDF:",
-    type=['pdf'],
-    accept_multiple_files=True,
-    help="Você pode selecionar múltiplos arquivos PDF para upload simultâneo."
+        "Selecione arquivos PDF:",
+        type=['pdf'],
+        accept_multiple_files=True,
+        help="Você pode selecionar múltiplos arquivos PDF para upload simultâneo."
     )
-    #st.markdown('</div>', unsafe_allow_html=True)
     
     if uploaded_files:
         st.markdown(f"**{len(uploaded_files)} arquivo(s) selecionado(s)**")
         
-        # Mostra preview dos arquivos
         for file in uploaded_files:
             st.markdown(f"• {file.name} ({file.size / 1024:.1f} KB)")
         
-        if st.button("🚀 Processar e Adicionar à Base", type="primary"):
+        if st.button("🚀 Processar e Adicionar à Base", type="primary", use_container_width=True):
             progress_bar = st.progress(0)
             status_text = st.empty()
             
@@ -571,7 +495,6 @@ def manage_documents_page():
                 all_new_docs = []
                 new_texts = []
                 
-                # Processa cada arquivo com segurança
                 for i, uploaded_file in enumerate(uploaded_files):
                     status_text.text(f"📄 Processando {uploaded_file.name}...")
                     progress_bar.progress((i + 0.5) / len(uploaded_files))
@@ -580,19 +503,16 @@ def manage_documents_page():
                         docs, warnings = process_pdf_safely(uploaded_file, max_chunks_per_file=200)
                         all_new_docs.extend(docs)
                         
-                        # Mostra alertas específicos do arquivo
                         for warning in warnings:
                             if "⚠️" in warning:
                                 st.warning(f"{uploaded_file.name}: {warning}")
                         
-                        # Extrai textos dos documentos
                         for doc in docs:
                             new_texts.append(doc.page_content)
                         
                         st.markdown(f'<div class="success-card">✅ {uploaded_file.name}: {len(docs)} chunks extraídos</div>', 
                                   unsafe_allow_html=True)
                         
-                        # Verificação contínua de recursos
                         current_safety = check_system_safety()
                         if not current_safety['current_ram_safe']:
                             st.error("⛔ Recursos críticos! Interrompendo processamento.")
@@ -604,19 +524,14 @@ def manage_documents_page():
                         continue
                 
                 if new_texts:
-                    # Adiciona documentos ao vectorstore
                     status_text.text("🔄 Atualizando base de conhecimento...")
                     progress_bar.progress(0.9)
                     
-                    # Adiciona novos textos aos documentos existentes
                     updated_docs = st.session_state.docs + new_texts
                     
-                    # Salva os documentos atualizados
                     if save_custom_docs(updated_docs):
-                        # Limpa o cache para recriar o pipeline com novos documentos
                         st.cache_resource.clear()
                         
-                        # Reinicializa o pipeline com documentos atualizados
                         qa_chain, vectorstore, docs, retriever, embeddings = initialize_rag_pipeline(updated_docs)
                         
                         if qa_chain:
@@ -643,7 +558,6 @@ def manage_documents_page():
                 status_text.text("❌ Erro no processamento")
                 progress_bar.progress(0)
     
-    # Seção de informações da base atual
     st.markdown("---")
     st.header("📊 Informações da Base Atual")
     
@@ -667,7 +581,6 @@ def manage_documents_page():
         st.markdown(f"**💾 FAISS**\n{stats['faiss_size_mb']:.1f} MB")
         st.markdown('</div>', unsafe_allow_html=True)
     
-    # Informações de recursos do sistema
     st.header("🔧 Recursos do Sistema")
     
     col1, col2 = st.columns(2)
@@ -692,7 +605,6 @@ def manage_documents_page():
         st.info(f"💾 **Max. FAISS:** {limits['max_faiss_size_gb']:.1f} GB")
         st.info(f"📝 **Context Window:** {limits['max_context_tokens']} tokens")
     
-    # Teste da base de conhecimento
     st.header("🔍 Testar Base de Conhecimento")
     test_query = st.text_input(
         "Digite uma consulta para testar:",
@@ -712,37 +624,31 @@ def manage_documents_page():
                         with st.expander(f"📋 Documento {i}", expanded=i==1):
                             st.markdown(f'<div class="doc-card">{doc.page_content}</div>', 
                                       unsafe_allow_html=True)
-                            if hasattr(doc, 'metadata') and doc.metadata:
-                                st.json(doc.metadata)
                 else:
                     st.info("ℹ️ Nenhum documento relevante encontrado.")
                     
             except Exception as e:
                 st.error(f"❌ Erro na busca: {e}")
     
-    # Seção de gerenciamento
     st.markdown("---")
     st.header("🛠️ Gerenciamento Avançado")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("🔄 Recarregar Pipeline", help="Recarrega o pipeline RAG"):
+        if st.button("🔄 Recarregar Pipeline", use_container_width=True):
             with st.spinner("🔄 Recarregando pipeline..."):
                 st.cache_resource.clear()
                 st.rerun()
     
     with col2:
-        if st.button("⚠️ Resetar Base", help="Remove documentos customizados"):
+        if st.button("⚠️ Resetar Base", use_container_width=True):
             if st.checkbox("✅ Confirmo que quero resetar para documentos padrão"):
                 try:
-                    # Remove arquivo de documentos customizados
                     if os.path.exists("data/custom_docs.pkl"):
                         os.remove("data/custom_docs.pkl")
                     
-                    # Limpa cache
                     st.cache_resource.clear()
-                    
                     st.success("✅ Base resetada! Recarregue a página para aplicar.")
                     
                 except Exception as e:
@@ -762,10 +668,9 @@ def main():
     
     # Inicializar pipeline (apenas uma vez)
     if 'qa_chain' not in st.session_state:
-        # Tentar carregar documentos customizados
         custom_docs = load_custom_docs()
-        
         qa_chain, vectorstore, docs, retriever, embeddings = initialize_rag_pipeline(custom_docs)
+        
         if qa_chain:
             st.session_state.qa_chain = qa_chain
             st.session_state.vectorstore = vectorstore
@@ -793,7 +698,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-Corrija esse código
