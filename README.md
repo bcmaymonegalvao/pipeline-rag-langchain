@@ -70,13 +70,13 @@
 
 ```mermaid
 flowchart LR
-    A["📄 Sample Docs"] --> B["🧹 Clean & Chunk (simple strings)"]
+    A["📄 Documentos de exemplo"] --> B["🧹 Limpar e dividir em trechos (strings simples)"]
     B --> C["🔎 Embeddings (MiniLM)"]
-    C --> D[("📚 FAISS Index")]
-    D --> E{"Top‑k Similarity (k=2)"}
-    E --> F["🧠 Prompt/QA Chain"]
-    F --> G["🤖 LLM (FLAN‑T5)"]
-    G --> H["🧾 Answer"]
+    C --> D[("📚 Índice FAISS")]
+    D --> E{"Top-k Similaridade (k=2)"}
+    E --> F["🧠 Cadeia de Prompt/Perguntas & Respostas (QA)"]
+    F --> G["🤖 LLM (FLAN-T5)"]
+    G --> H["🧾 Resposta"]
     
     classDef primary fill:#6c5ce7,stroke:#5f3dc4,stroke-width:2px,color:#fff
     classDef secondary fill:#a29bfe,stroke:#6c5ce7,stroke-width:2px,color:#fff
