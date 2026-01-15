@@ -69,7 +69,7 @@
 ## 🏗️ Arquitetura
 
 ```mermaid
-flowchart LR
+flowchart TB
     A["📄 Documentos de exemplo"] --> B["🧹 Limpar e dividir em trechos (strings simples)"]
     B --> C["🔎 Embeddings (MiniLM)"]
     C --> D[("📚 Índice FAISS")]
