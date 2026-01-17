@@ -53,46 +53,38 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 def inject_minimal_css() -> None:
-    """Tema claro (principal) com acentos escuros (auxiliares) e alto contraste no título."""
+    """Tema claro com acentos escuros e correção do header do Streamlit cobrindo o topo."""
     st.markdown(
         """
         <style>
           :root{
-            /* Base clara */
             --bg: #f7f9fc;
             --panel: #ffffff;
             --card: #ffffff;
 
-            /* Texto */
             --text: #0b1220;
             --muted: #475569;
 
-            /* Linhas/bordas */
             --line: #d6deea;
 
-            /* Acento (auxiliar escuro) */
-            --accent: #1e3a8a;       /* azul escuro */
-            --accentSoft: #e8f0ff;   /* azul bem claro */
+            --accent: #1e3a8a;
+            --accentSoft: #e8f0ff;
 
-            /* Estados */
             --ok: #15803d;
             --warn: #b45309;
             --err: #b91c1c;
           }
 
           /* Fundo geral */
-          .stApp {
-            background: var(--bg);
-            color: var(--text);
-          }
+          .stApp { background: var(--bg); color: var(--text); }
 
-          /* Sidebar clara */
+          /* Sidebar */
           section[data-testid="stSidebar"]{
             background: var(--panel);
             border-right: 1px solid var(--line);
           }
 
-          /* Título com contraste alto */
+          /* Título */
           .miguel-title {
             font-size: 2.2rem;
             font-weight: 900;
@@ -141,11 +133,6 @@ def inject_minimal_css() -> None:
             margin-right: 0.35rem;
           }
 
-          /* Status */
-          .state-ok    { color: var(--ok); }
-          .state-warn  { color: var(--warn); }
-          .state-err   { color: var(--err); }
-
           /* Links */
           a { color: var(--accent); }
 
@@ -155,33 +142,29 @@ def inject_minimal_css() -> None:
             border: 1px solid var(--line);
           }
 
-          /* Espaçamento superior */
-          .block-container { padding-top: 1.0rem; }
+          /* --- CORREÇÃO: evitar que a barra superior corte o título --- */
+          header[data-testid="stHeader"]{
+            background: transparent;
+          }
+
+          div[data-testid="stAppViewContainer"] > .main {
+            padding-top: 4.25rem;
+          }
+
+          .block-container {
+            padding-top: 0.75rem;
+          }
+
+          @media (max-width: 768px){
+            div[data-testid="stAppViewContainer"] > .main {
+              padding-top: 5.0rem;
+            }
+          }
         </style>
         """,
         unsafe_allow_html=True,
-        /* --- Evitar que o header do Streamlit cubra o conteúdo --- */
-        header[data-testid="stHeader"]{
-          background: transparent;   /* não pinta por cima do título */
-        }
-        
-        /* Empurra a área principal para baixo, evitando corte do título */
-        div[data-testid="stAppViewContainer"] > .main {
-          padding-top: 4.25rem;
-        }
-        
-        /* Mantém o espaçamento interno do container (conteúdo) */
-        .block-container {
-          padding-top: 0.75rem;
-        }
-        
-        /* Em telas menores, o header pode ser maior */
-        @media (max-width: 768px){
-        div[data-testid="stAppViewContainer"] > .main {
-            padding-top: 5.0rem;
-          }
-        }
     )
+
 
 
 def render_header() -> None:
