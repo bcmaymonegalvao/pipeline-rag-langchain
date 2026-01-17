@@ -1,700 +1,1117 @@
+"""
+MIGUEL — Modelo Interativo Generativo de Linguagem para Uso Educacional Livre
+----------------------------------------------------------------------------
+
+Aplicativo didático (Streamlit) que demonstra um pipeline RAG (Retrieval-Augmented Generation)
+com componentes 100% locais e gratuitos:
+- Embeddings (MiniLM) + FAISS (busca por similaridade)
+- LLM (FLAN-T5) para geração de resposta
+- Upload de PDFs para ampliar a base de conhecimento
+
+Objetivo: permitir que estudantes e professores aprendam IA “por dentro”, personalizando e
+observando as etapas do pipeline, com uma interface clara e documentação acessível.
+
+Requisitos atendidos (resumo):
+1) Nome alterado para “Modelo Interativo Generativo de Linguagem para Uso Educacional Livre”.
+2) Interface aprimorada com foco em usabilidade (Heurísticas de Nielsen).
+3) Princípios da Gestalt expostos e aplicados no layout.
+4) Seção de Glossário com termos técnicos usados/interativos.
+5) Docstrings didáticas adicionadas/melhoradas.
+6) Sem emoji de foguete no título.
+7) Paleta minimalista (azul escuro + branco + cinza).
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import pickle
+import tempfile
+import time
+from typing import Any, Dict, List, Optional, Tuple
+
 import psutil
 import streamlit as st
-import time
-import os
-import tempfile
-import pickle
-from pathlib import Path
-from typing import List, Dict, Any
-import logging
 
-# Configuração da página
+
+# =============================================================================
+# Configuração geral do app
+# =============================================================================
+
+APP_NAME = "Modelo Interativo Generativo de Linguagem para Uso Educacional Livre"
+APP_SHORT = "MIGUEL"
+APP_SUBTITLE = "Aplicativo didático (RAG) com LLM local, Embeddings e FAISS — sem API keys"
+
+# Evite usar emojis chamativos no título e mantenha uma estética minimalista
 st.set_page_config(
-    page_title="🚀 Pipeline RAG LangChain",
-    page_icon="🤖",
+    page_title=f"{APP_SHORT} — {APP_NAME}",
+    page_icon="🧩",  # discreto
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# CSS personalizado
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 3rem;
-        font-weight: bold;
-        text-align: center;
-        background: linear-gradient(90deg, #6c5ce7, #a29bfe);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 1rem;
-    }
-    
-    .sub-header {
-        text-align: center;
-        color: #636e72;
-        font-size: 1.2rem;
-        margin-bottom: 2rem;
-    }
-    
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1rem;
-        border-radius: 10px;
-        color: white;
-        text-align: center;
-        margin: 0.5rem 0;
-    }
-    
-    .doc-card {
-        background: #f8f9fa;
-        border-left: 4px solid #6c5ce7;
-        padding: 1rem;
-        margin: 0.5rem 0;
-        border-radius: 0 10px 10px 0;
-    }
-    
-    .response-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 1.5rem;
-        border-radius: 10px;
-        margin: 1rem 0;
-        box-shadow: 0 4px 15px 0 rgba(31, 38, 135, 0.37);
-    }    
-    
-    .success-card {
-        background: linear-gradient(135deg, #00b894 0%, #00a085 100%);
-        color: white;
-        padding: 1rem;
-        border-radius: 10px;
-        margin: 1rem 0;
-    }
-    
-    .warning-card {
-        background: linear-gradient(135deg, #fdcb6e 0%, #f39c12 100%);
-        color: white;
-        padding: 1rem;
-        border-radius: 10px;
-        margin: 1rem 0;
-    }
-</style>
-""", unsafe_allow_html=True)
 
-def get_system_stats():
-    """Retorna estatísticas básicas do sistema para exibição"""
-    ram = psutil.virtual_memory()
-    faiss_size_mb = 0
-    total_vectors = 0
-    total_docs = len(st.session_state.docs) if 'docs' in st.session_state else 0
+# =============================================================================
+# Estilo (paleta minimalista) + utilidades de UI
+# =============================================================================
 
-    # Obter tamanho do índice FAISS se existir
-    if 'vectorstore' in st.session_state and st.session_state.vectorstore is not None:
-        try:
-            faiss_index = st.session_state.vectorstore.index
-            faiss_size_mb = faiss_index.ntotal * 4 / (1024*1024)
-            total_vectors = faiss_index.ntotal
-        except Exception as e:
-            logger.warning(f"Erro ao obter tamanho FAISS: {e}")
-
-    return {
-        "ram_used": ram.used / (1024**3),
-        "ram_total": ram.total / (1024**3),
-        "faiss_size_mb": faiss_size_mb,
-        "total_vectors": total_vectors,
-        "total_docs": total_docs,
-    }
-
-def check_system_safety():
+def inject_minimal_css() -> None:
     """
-    Verifica se os recursos do sistema estão dentro de limites seguros.
-    Retorna um dicionário com status de segurança e métricas.
+    Injeta CSS minimalista (azul escuro + branco + cinza).
+
+    Princípios aplicados:
+    - Figura-fundo (alto contraste para leitura).
+    - Proximidade e região comum (cards e blocos com borda suave).
+    - Consistência (mesmos espaçamentos, tipografia e estilos).
     """
-    stats = get_system_stats()
-    
-    RAM_USAGE_THRESHOLD = 0.85
-    FAISS_SIZE_THRESHOLD_GB = 8.0
-    
-    current_ram_used_gb = stats["ram_used"]
-    total_ram_gb = stats["ram_total"]
-    ram_usage_pct = current_ram_used_gb / total_ram_gb if total_ram_gb > 0 else 0
-    
-    faiss_size_gb = stats["faiss_size_mb"] / 1024
-    
-    return {
-        "current_ram_used_gb": current_ram_used_gb,
-        "total_ram_gb": total_ram_gb,
-        "ram_usage_pct": ram_usage_pct,
-        "faiss_size_gb": faiss_size_gb,
-        "current_ram_safe": ram_usage_pct < RAM_USAGE_THRESHOLD,
-        "faiss_size_safe": faiss_size_gb < FAISS_SIZE_THRESHOLD_GB,
-        "overall_safe": ram_usage_pct < RAM_USAGE_THRESHOLD and faiss_size_gb < FAISS_SIZE_THRESHOLD_GB
-    }
+    st.markdown(
+        """
+        <style>
+          :root{
+            --bg: #0b1220;         /* azul bem escuro */
+            --panel: #0f172a;      /* painéis */
+            --text: #e5e7eb;       /* texto */
+            --muted: #9ca3af;      /* texto secundário */
+            --line: #24314a;       /* bordas */
+            --accent: #2563eb;     /* azul */
+            --ok: #16a34a;
+            --warn: #f59e0b;
+            --err: #ef4444;
+            --card: #0c1528;
+          }
 
-def get_theoretical_limits():
-    """Retorna limites teóricos baseados em configurações e hardware"""
-    return {
-        "max_vectors_ram": 1000000,
-        "max_docs_estimate": 20000,
-        "max_faiss_size_gb": 10.0,
-        "max_context_tokens": 2048,
-    }
+          /* Fundo geral (Streamlit já controla muita coisa; reforçamos contraste) */
+          .stApp {
+            background: linear-gradient(180deg, var(--bg) 0%, #070b14 100%);
+            color: var(--text);
+          }
 
-def get_default_docs():
-    """Retorna os documentos padrão"""
-    return [
-        "O churn é o cancelamento ou abandono de clientes em um serviço ou produto. É uma métrica crucial para avaliar a retenção e satisfação do cliente.",
-        "NPS, ou Net Promoter Score, mede a lealdade dos clientes através da pergunta: 'Você recomendaria nossa empresa a um amigo?' Varia de -100 a +100.",
-        "LangChain é uma biblioteca para construir aplicações que usam modelos de linguagem large (LLMs) integrados a outras fontes de dados e ferramentas.",
-        "RAG, Retrieval-Augmented Generation, conecta modelos de linguagem a bases de conhecimento através de embeddings e mecanismos de busca para melhorar respostas.",
-        "Embeddings representam texto em vetores numéricos que capturam significado semântico, possibilitando busca eficiente por similaridade.",
-        "O pipeline básico de RAG inclui: criação de embeddings, uso do retriever para buscar documentos relevantes e geração da resposta pelo LLM.",
-        "Machine Learning é um subcampo da inteligência artificial que permite que sistemas aprendam e melhorem automaticamente a partir da experiência.",
-        "Deep Learning utiliza redes neurais artificiais com múltiplas camadas para modelar e entender dados complexos como imagens, texto e áudio.",
-        "Natural Language Processing (NLP) é a área da IA focada na interação entre computadores e linguagem humana natural.",
-        "Business Intelligence (BI) envolve estratégias e tecnologias para análise de informações de negócios e suporte à tomada de decisão."
-    ]
+          /* Título principal */
+          .miguel-title {
+            font-size: 2.1rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            text-align: left;
+            margin: 0.25rem 0 0.2rem 0;
+            color: var(--text);
+          }
 
-def process_pdf(uploaded_file):
-    """Processa um arquivo PDF e extrai o texto"""
-    tmp_file_path = None
+          .miguel-subtitle {
+            color: var(--muted);
+            font-size: 1.05rem;
+            margin: 0 0 1.25rem 0;
+          }
+
+          /* Cards / blocos */
+          .miguel-card {
+            background: rgba(12, 21, 40, 0.95);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 1rem 1.1rem;
+            margin: 0.6rem 0;
+          }
+
+          .miguel-card h3, .miguel-card h4 {
+            margin: 0 0 0.35rem 0;
+            color: var(--text);
+          }
+
+          .miguel-card p {
+            margin: 0.2rem 0 0 0;
+            color: var(--muted);
+          }
+
+          .miguel-pill {
+            display: inline-block;
+            padding: 0.15rem 0.55rem;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            background: rgba(37, 99, 235, 0.10);
+            color: var(--text);
+            font-size: 0.85rem;
+            margin-right: 0.35rem;
+          }
+
+          /* Destaques de estado (visibilidade do status do sistema — Nielsen) */
+          .state-ok    { color: var(--ok); }
+          .state-warn  { color: var(--warn); }
+          .state-err   { color: var(--err); }
+
+          /* Expander mais “limpo” */
+          details, summary {
+            color: var(--text);
+          }
+
+          /* Ajuste de links */
+          a { color: #93c5fd; }
+
+          /* Remover excesso de margens do container de conteúdo */
+          .block-container {
+            padding-top: 1.0rem;
+          }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_header() -> None:
+    """Renderiza o cabeçalho do app (título + subtítulo), sem emoji de foguete."""
+    st.markdown(f"<div class='miguel-title'>{APP_NAME}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='miguel-subtitle'>{APP_SUBTITLE}</div>", unsafe_allow_html=True)
+
+
+def card(title: str, body_md: str, pills: Optional[List[str]] = None) -> None:
+    """
+    Renderiza um card simples para agrupar conteúdo (Gestalt: região comum + proximidade).
+
+    Args:
+        title: Título do card.
+        body_md: Conteúdo em Markdown.
+        pills: Pequenos rótulos (chips) para reforçar "similaridade" e "escaneabilidade".
+    """
+    pills_html = ""
+    if pills:
+        pills_html = "".join([f"<span class='miguel-pill'>{p}</span>" for p in pills])
+
+    st.markdown(
+        f"""
+        <div class="miguel-card">
+          <h3>{title}</h3>
+          {pills_html}
+          <div style="margin-top:0.45rem">{body_md}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# =============================================================================
+# Estado da sessão e persistência local
+# =============================================================================
+
+DATA_DIR = "data"
+CUSTOM_DOCS_PATH = os.path.join(DATA_DIR, "custom_docs.pkl")
+
+
+def init_session_state() -> None:
+    """
+    Inicializa variáveis em st.session_state para evitar erros e manter consistência (Nielsen).
+
+    Heurísticas atendidas:
+    - Prevenção de erros (estado sempre existe antes do uso).
+    - Consistência e padrões (chaves fixas).
+    """
+    st.session_state.setdefault("page", "Chat")
+    st.session_state.setdefault("query_history", [])
+    st.session_state.setdefault("docs", [])
+    st.session_state.setdefault("qa_chain", None)
+    st.session_state.setdefault("vectorstore", None)
+    st.session_state.setdefault("retriever", None)
+    st.session_state.setdefault("embeddings", None)
+
+    # Configurações interativas (explicadas no Glossário)
+    st.session_state.setdefault("retriever_k", 3)
+    st.session_state.setdefault("max_new_tokens", 512)
+    st.session_state.setdefault("temperature", 0.7)
+
+    # Para UX: “mensagens” que sobrevivem a rerun (feedback)
+    st.session_state.setdefault("toast", None)
+
+
+def save_custom_docs(docs_list: List[str]) -> bool:
+    """
+    Salva documentos personalizados em disco (arquivo pickle local).
+
+    Observação didática:
+    - Pickle é uma forma simples de guardar dados Python em arquivo.
+    - Em projetos reais, pode-se preferir JSON/DB — aqui o foco é ensino e simplicidade.
+
+    Args:
+        docs_list: Lista de strings com conteúdos textuais.
+
+    Returns:
+        True se salvou com sucesso; False caso contrário.
+    """
     try:
-        from langchain_community.document_loaders import PyPDFLoader
-        from langchain.text_splitter import RecursiveCharacterTextSplitter
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            tmp_file_path = tmp_file.name
-        
-        loader = PyPDFLoader(tmp_file_path)
-        pages = loader.load()
-        
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
-        )
-        
-        docs = text_splitter.split_documents(pages)
-        return docs
-        
-    except Exception as e:
-        logger.error(f"Erro ao processar PDF: {e}")
-        raise e
-    finally:
-        if tmp_file_path and os.path.exists(tmp_file_path):
-            try:
-                os.unlink(tmp_file_path)
-            except Exception as e:
-                logger.warning(f"Erro ao deletar arquivo temporário: {e}")
-
-def process_pdf_safely(uploaded_file, max_chunks_per_file=200):
-    """
-    Processa um arquivo PDF com segurança limitando número de chunks.
-    Retorna uma tupla (lista de docs, lista de warnings).
-    """
-    warnings = []
-    docs = []
-    try:
-        loaded_docs = process_pdf(uploaded_file)
-        if len(loaded_docs) > max_chunks_per_file:
-            warnings.append(f"⚠️ Arquivo muito grande, cortado para {max_chunks_per_file} chunks")
-            docs = loaded_docs[:max_chunks_per_file]
-        else:
-            docs = loaded_docs
-    except Exception as e:
-        warnings.append(f"⚠️ Erro ao processar PDF: {str(e)}")
-        docs = []
-    return docs, warnings
-
-def save_custom_docs(docs_list):
-    """Salva a lista de documentos customizados"""
-    try:
-        os.makedirs("data", exist_ok=True)
-        with open("data/custom_docs.pkl", "wb") as f:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(CUSTOM_DOCS_PATH, "wb") as f:
             pickle.dump(docs_list, f)
         return True
     except Exception as e:
         logger.error(f"Erro ao salvar documentos: {e}")
         return False
 
-def load_custom_docs():
-    """Carrega a lista de documentos customizados"""
+
+def load_custom_docs() -> Optional[List[str]]:
+    """
+    Carrega documentos personalizados do arquivo local, se existir.
+
+    Returns:
+        Lista de documentos (strings) ou None caso não exista/erro.
+    """
     try:
-        if os.path.exists("data/custom_docs.pkl"):
-            with open("data/custom_docs.pkl", "rb") as f:
+        if os.path.exists(CUSTOM_DOCS_PATH):
+            with open(CUSTOM_DOCS_PATH, "rb") as f:
                 return pickle.load(f)
         return None
     except Exception as e:
         logger.error(f"Erro ao carregar documentos: {e}")
         return None
 
-def format_response(response_data: Dict[str, Any]) -> tuple:
-    """Formata a resposta do RAG para exibição"""
+
+# =============================================================================
+# Conteúdo didático (documentos padrão + glossário)
+# =============================================================================
+
+def get_default_docs() -> List[str]:
+    """
+    Retorna uma base mínima de documentos de exemplo.
+
+    Por que isso existe?
+    - Serve para demonstrar o pipeline RAG “funcionando” mesmo sem upload.
+    - É propositalmente pequena para reduzir consumo de RAM/CPU em máquinas modestas.
+    """
+    return [
+        "Churn é o cancelamento/abandono de clientes em um serviço. É uma métrica importante de retenção.",
+        "NPS (Net Promoter Score) mede lealdade perguntando se o cliente recomendaria a empresa; varia de -100 a +100.",
+        "LangChain é um framework para construir aplicações com modelos de linguagem e componentes (memória, ferramentas, dados).",
+        "RAG (Retrieval-Augmented Generation) conecta um modelo de linguagem a uma base de conhecimento para responder com evidências.",
+        "Representações vetoriais (embeddings) transformam texto em números, preservando o significado para buscas por similaridade.",
+        "Um pipeline RAG típico: dividir texto (chunking), gerar embeddings, indexar, recuperar trechos relevantes e gerar resposta.",
+        "Machine Learning é uma área da IA em que sistemas aprendem padrões a partir de dados para tomar decisões ou fazer previsões.",
+        "Deep Learning usa redes neurais com muitas camadas para lidar com padrões complexos (texto, imagem, áudio).",
+        "NLP (Processamento de Linguagem Natural) é a área da IA que lida com compreensão e geração de linguagem humana.",
+        "BI (Business Intelligence) reúne práticas e ferramentas para análise de dados e suporte à decisão em negócios.",
+    ]
+
+
+GLOSSARY: Dict[str, Dict[str, str]] = {
+    "LLM (Large Language Model)": {
+        "o_que_e": "Um modelo de linguagem em grande escala: aprende padrões de texto e consegue gerar respostas em linguagem natural.",
+        "onde_aparece_no_app": "É o componente que gera a resposta final (aqui: FLAN-T5).",
+        "por_que_importa": "Define a qualidade do texto gerado, mas pode ‘alucinar’ — por isso usamos RAG com documentos.",
+    },
+    "RAG (Geração aumentada por recuperação)": {
+        "o_que_e": "Arquitetura que busca trechos relevantes em documentos e inclui esse contexto antes do modelo gerar a resposta.",
+        "onde_aparece_no_app": "No ‘retriever’ + ‘vector store’, que selecionam os trechos e os entregam ao modelo.",
+        "por_que_importa": "Aumenta a chance de resposta correta e ancorada em evidências (reduz alucinações).",
+    },
+    "Chunking (Divisão em trechos)": {
+        "o_que_e": "Processo de dividir textos longos em partes menores para indexação e busca.",
+        "onde_aparece_no_app": "Ao processar PDFs: o texto é cortado em trechos com sobreposição.",
+        "por_que_importa": "Trechos menores tornam a busca por similaridade mais eficiente e o contexto mais útil.",
+    },
+    "Representações vetoriais (Embeddings)": {
+        "o_que_e": "Transformação do texto em um vetor numérico que “representa o significado”.",
+        "onde_aparece_no_app": "Usadas para indexar documentos e comparar similaridade com a pergunta.",
+        "por_que_importa": "Permite busca semântica (por sentido), não apenas por palavras exatas.",
+    },
+    "FAISS (Vector Store)": {
+        "o_que_e": "Biblioteca de busca eficiente por similaridade entre vetores.",
+        "onde_aparece_no_app": "Armazena embeddings e retorna os trechos mais próximos da pergunta.",
+        "por_que_importa": "Acelera a recuperação de informações mesmo com milhares de trechos.",
+    },
+    "Retriever (Recuperador)": {
+        "o_que_e": "Componente que consulta o índice vetorial e retorna os Top-k trechos mais relevantes.",
+        "onde_aparece_no_app": "Configuração ‘k’ (Top-k) influencia quantos trechos são enviados ao modelo.",
+        "por_que_importa": "Poucos trechos → pode faltar contexto; muitos trechos → pode confundir o modelo.",
+    },
+    "Top-k (k)": {
+        "o_que_e": "Quantidade de trechos retornados pela busca por similaridade.",
+        "onde_aparece_no_app": "Configuração na barra lateral (Configurações).",
+        "por_que_importa": "Ajusta equilíbrio entre contexto suficiente e ruído excessivo.",
+    },
+    "Temperatura (temperature)": {
+        "o_que_e": "Controla aleatoriedade do texto gerado: menor = mais previsível; maior = mais criativo.",
+        "onde_aparece_no_app": "Configuração na barra lateral (Configurações).",
+        "por_que_importa": "Em contexto didático, valores menores tendem a gerar respostas mais consistentes.",
+    },
+    "max_new_tokens": {
+        "o_que_e": "Limite máximo de tokens (pedaços de texto) que o modelo pode gerar na resposta.",
+        "onde_aparece_no_app": "Configuração na barra lateral (Configurações).",
+        "por_que_importa": "Evita respostas longas demais e controla tempo de processamento.",
+    },
+}
+
+
+# =============================================================================
+# Métricas e segurança (recursos locais)
+# =============================================================================
+
+def get_system_stats() -> Dict[str, float]:
+    """
+    Coleta estatísticas básicas do sistema (RAM) e do índice vetorial.
+
+    Objetivo didático:
+    - Mostrar que IA local consome recursos.
+    - Incentivar prática responsável (evitar travamentos por excesso de dados).
+    """
+    ram = psutil.virtual_memory()
+
+    faiss_size_mb = 0.0
+    total_vectors = 0
+    total_docs = len(st.session_state.docs) if st.session_state.get("docs") else 0
+
+    if st.session_state.get("vectorstore") is not None:
+        try:
+            faiss_index = st.session_state.vectorstore.index
+            total_vectors = int(faiss_index.ntotal)
+            # Estimativa simplificada de tamanho (não é “tamanho real em disco”)
+            faiss_size_mb = (total_vectors * 4) / (1024 * 1024)
+        except Exception as e:
+            logger.warning(f"Erro ao obter dados do FAISS: {e}")
+
+    return {
+        "ram_used_gb": ram.used / (1024 ** 3),
+        "ram_total_gb": ram.total / (1024 ** 3),
+        "faiss_size_mb": float(faiss_size_mb),
+        "total_vectors": float(total_vectors),
+        "total_docs": float(total_docs),
+    }
+
+
+def check_system_safety() -> Dict[str, Any]:
+    """
+    Verifica limites “seguros” de uso para evitar travamentos.
+
+    Heurística (Nielsen): prevenção de erros.
+    - Se RAM estiver muito alta, interrompemos operações pesadas.
+
+    Returns:
+        Dicionário com indicadores e status geral.
+    """
+    stats = get_system_stats()
+    ram_usage_pct = stats["ram_used_gb"] / stats["ram_total_gb"] if stats["ram_total_gb"] else 0.0
+    faiss_size_gb = stats["faiss_size_mb"] / 1024.0
+
+    RAM_USAGE_THRESHOLD = 0.85
+    FAISS_SIZE_THRESHOLD_GB = 8.0
+
+    return {
+        "ram_usage_pct": ram_usage_pct,
+        "faiss_size_gb": faiss_size_gb,
+        "ram_safe": ram_usage_pct < RAM_USAGE_THRESHOLD,
+        "faiss_safe": faiss_size_gb < FAISS_SIZE_THRESHOLD_GB,
+        "overall_safe": (ram_usage_pct < RAM_USAGE_THRESHOLD) and (faiss_size_gb < FAISS_SIZE_THRESHOLD_GB),
+    }
+
+
+def get_theoretical_limits() -> Dict[str, Any]:
+    """
+    Limites aproximados (didáticos) para orientar o usuário.
+
+    Observação:
+    - Esses valores não são “verdades absolutas”; variam por hardware e tamanho do texto.
+    - O foco é ajudar o público leigo a ter referências.
+    """
+    return {
+        "max_vectors_estimate": 1_000_000,
+        "max_docs_estimate": 20_000,
+        "max_faiss_size_gb": 10.0,
+        "context_window_tokens_estimate": 2048,
+    }
+
+
+# =============================================================================
+# PDF -> texto -> chunks
+# =============================================================================
+
+def process_pdf(uploaded_file) -> List[Any]:
+    """
+    Extrai texto de um PDF e divide em trechos (chunks) com sobreposição.
+
+    Para leigos:
+    - PDF é um formato difícil de “ler” diretamente como texto.
+    - O loader converte páginas em texto.
+    - Depois cortamos em partes menores para facilitar indexação e busca.
+
+    Args:
+        uploaded_file: Arquivo enviado via Streamlit (st.file_uploader).
+
+    Returns:
+        Lista de Document objects (LangChain) com page_content.
+    """
+    tmp_file_path = None
+    try:
+        from langchain_community.document_loaders import PyPDFLoader
+        from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_file_path = tmp_file.name
+
+        loader = PyPDFLoader(tmp_file_path)
+        pages = loader.load()
+
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            length_function=len,
+        )
+
+        return text_splitter.split_documents(pages)
+
+    except Exception as e:
+        logger.error(f"Erro ao processar PDF: {e}")
+        raise
+    finally:
+        if tmp_file_path and os.path.exists(tmp_file_path):
+            try:
+                os.unlink(tmp_file_path)
+            except Exception as e:
+                logger.warning(f"Erro ao deletar temporário: {e}")
+
+
+def process_pdf_safely(uploaded_file, max_chunks_per_file: int = 200) -> Tuple[List[Any], List[str]]:
+    """
+    Versão “segura” do processamento: limita a quantidade de chunks.
+
+    Por que limitar?
+    - Muitos chunks podem consumir muita RAM e deixar o app lento.
+    - Para fins didáticos, é melhor subir poucos documentos e observar o pipeline.
+
+    Args:
+        uploaded_file: PDF enviado.
+        max_chunks_per_file: Limite de trechos por arquivo.
+
+    Returns:
+        (docs, warnings) — lista de documentos e avisos amigáveis.
+    """
+    warnings: List[str] = []
+    try:
+        loaded_docs = process_pdf(uploaded_file)
+        if len(loaded_docs) > max_chunks_per_file:
+            warnings.append(f"Arquivo grande: cortado para {max_chunks_per_file} trechos.")
+            return loaded_docs[:max_chunks_per_file], warnings
+        return loaded_docs, warnings
+    except Exception as e:
+        warnings.append(f"Erro ao processar PDF: {str(e)}")
+        return [], warnings
+
+
+# =============================================================================
+# Pipeline RAG (LangChain + HuggingFace + FAISS)
+# =============================================================================
+
+def format_response(response_data: Dict[str, Any]) -> Tuple[str, List[Any]]:
+    """
+    Normaliza a resposta do pipeline RAG para exibição.
+
+    Para leigos:
+    - O pipeline pode devolver um dicionário com:
+      - result: texto final
+      - source_documents: trechos usados como evidência
+
+    Returns:
+        (answer, source_docs)
+    """
     if isinstance(response_data, dict):
-        answer = response_data.get("result", "Resposta não encontrada")
+        answer = response_data.get("result", "Resposta não encontrada.")
         source_docs = response_data.get("source_documents", [])
     else:
         answer = str(response_data)
         source_docs = []
-    
+
     answer = answer.strip()
-    if not answer or answer.lower() in ["", "none", "null"]:
+    if not answer:
         answer = "Desculpe, não consegui gerar uma resposta adequada para sua pergunta."
-    
     return answer, source_docs
 
+
 @st.cache_resource(show_spinner=False)
-def initialize_rag_pipeline(custom_docs=None):
-    """Inicializa o pipeline RAG com cache para otimizar performance"""
+def initialize_rag_pipeline(
+    docs_texts: List[str],
+    retriever_k: int,
+    temperature: float,
+    max_new_tokens: int,
+):
+    """
+    Inicializa o pipeline RAG (com cache) para melhorar performance.
+
+    Componentes:
+    1) Embeddings (MiniLM): transforma texto em vetores.
+    2) FAISS: indexa vetores e permite busca por similaridade.
+    3) Retriever: escolhe os Top-k trechos mais relevantes.
+    4) LLM (FLAN-T5): gera a resposta usando os trechos recuperados.
+
+    Args:
+        docs_texts: Lista de textos (strings) a indexar.
+        retriever_k: Quantidade de trechos recuperados (Top-k).
+        temperature: Controle de aleatoriedade do texto gerado.
+        max_new_tokens: Tamanho máximo da resposta.
+
+    Returns:
+        (qa_chain, vectorstore, retriever, embeddings)
+    """
     try:
-        with st.spinner("🔧 Inicializando pipeline RAG..."):
-            from sentence_transformers import SentenceTransformer
-            from langchain_community.embeddings import HuggingFaceEmbeddings
-            from langchain_community.vectorstores import FAISS
-            from langchain.chains import RetrievalQA
-            from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline as hf_pipeline
-            from langchain_community.llms import HuggingFacePipeline
-            
-            docs = custom_docs if custom_docs else get_default_docs()
-            
-            st.info("📊 Carregando modelo de embeddings MiniLM...")
-            embeddings = HuggingFaceEmbeddings(
-                model_name="sentence-transformers/all-MiniLM-L6-v2",
-                model_kwargs={'device': 'cpu'},
-                encode_kwargs={'normalize_embeddings': True}
-            )
-            
-            st.info("🗃️ Construindo índice vetorial FAISS...")
-            vectorstore = FAISS.from_texts(docs, embeddings)
-            
-            retriever = vectorstore.as_retriever(
-                search_type="similarity",
-                search_kwargs={"k": 3}
-            )
-            
-            st.info("🤖 Carregando modelo FLAN-T5...")
-            model_name = "google/flan-t5-base"
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-            
-            gen_pipeline = hf_pipeline(
-                "text2text-generation",
-                model=model,
-                tokenizer=tokenizer,
-                max_new_tokens=512,
-                temperature=0.7,
-                do_sample=True,
-                repetition_penalty=1.1
-            )
-            
-            llm = HuggingFacePipeline(pipeline=gen_pipeline)
-            
-            st.info("🔗 Configurando chain RAG...")
-            qa_chain = RetrievalQA.from_chain_type(
-                llm=llm,
-                chain_type="stuff",
-                retriever=retriever,
-                return_source_documents=True,
-                verbose=False
-            )
-            
-            st.success("✅ Pipeline RAG inicializado com sucesso!")
-            return qa_chain, vectorstore, docs, retriever, embeddings
-            
-    except Exception as e:
-        st.error(f"❌ Erro ao inicializar pipeline: {str(e)}")
-        logger.error(f"Erro na inicialização: {e}")
-        return None, None, None, None, None
+        from langchain_community.embeddings import HuggingFaceEmbeddings
+        from langchain_community.vectorstores import FAISS
+        from langchain.chains import RetrievalQA
+        from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline as hf_pipeline
+        from langchain_community.llms import HuggingFacePipeline
 
-def show_sidebar():
-    """Mostra a sidebar com informações do sistema"""
-    with st.sidebar:
-        st.header("📍 Navegação")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🤖 Chat", use_container_width=True):
-                st.session_state.current_page = "chat"
-        with col2:
-            if st.button("📚 Documentos", use_container_width=True):
-                st.session_state.current_page = "manage"
-        
-        st.markdown("---")
-        
-        st.header("ℹ️ Sobre o Sistema")
-        st.markdown("""
-        **🎯 Tecnologias:**
-        - 🧠 **LLM**: FLAN-T5 (Google)
-        - 🔍 **Embeddings**: MiniLM (HuggingFace) 
-        - 📊 **Vector Store**: FAISS
-        - 🔗 **Framework**: LangChain
-        
-        **⚡ Características:**
-        - ✅ 100% Gratuito (sem API keys)
-        - 🖥️ Roda localmente
-        - 🚀 Interface moderna
-        - 📚 Base de conhecimento expansível
-        - 📄 Upload de PDFs
-        """)
-        
-        st.header("📋 Como usar")
-        if st.session_state.current_page == "chat":
-            st.markdown("""
-            1. Digite sua pergunta
-            2. Clique em "Buscar Resposta"
-            3. Veja a resposta e documentos
-            """)
-        else:
-            st.markdown("""
-            1. Faça upload de PDFs
-            2. Processe os documentos
-            3. Teste a base atualizada
-            """)
-        
-        st.header("📊 Sistema")
-        if 'qa_chain' in st.session_state:
-            st.success("🟢 Pipeline Ativo")
-            st.info(f"📄 Docs: {len(st.session_state.docs)}")
-        else:
-            st.warning("🟡 Inicializando...")
-
-def chat_page():
-    """Página principal do chat"""
-    st.markdown('<div class="main-header">🚀 Pipeline RAG LangChain</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Retrieval-Augmented Generation com HuggingFace & FAISS</div>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.header("💭 Faça sua pergunta")
-        
-        query = st.text_area(
-            "Digite sua pergunta aqui:",
-            placeholder="Ex: O que é RAG? Como funciona machine learning?",
-            height=100,
-            key="chat_input"
+        # 1) Embeddings
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
         )
-        
-        st.markdown("**💡 Perguntas de exemplo:**")
-        col_btn1, col_btn2, col_btn3 = st.columns(3)
-        
-        example_queries = [
-            ("🔄 O que é churn?", "O que significa churn em análise de clientes?"),
-            ("🤖 Como funciona RAG?", "Como funciona o pipeline de RAG?"),
-            ("📚 O que é LangChain?", "Explique o que é LangChain e para que serve.")
+
+        # 2) Vector store (FAISS)
+        vectorstore = FAISS.from_texts(docs_texts, embeddings)
+
+        # 3) Retriever
+        retriever = vectorstore.as_retriever(
+            search_type="similarity",
+            search_kwargs={"k": int(retriever_k)},
+        )
+
+        # 4) LLM (FLAN-T5)
+        model_name = "google/flan-t5-base"
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+
+        gen_pipeline = hf_pipeline(
+            "text2text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            max_new_tokens=int(max_new_tokens),
+            temperature=float(temperature),
+            do_sample=True,
+            repetition_penalty=1.1,
+        )
+
+        llm = HuggingFacePipeline(pipeline=gen_pipeline)
+
+        # 5) Chain (RAG)
+        described_prompt = (
+            "Você é um assistente didático. Responda de forma clara, objetiva e baseada nos trechos fornecidos. "
+            "Se a informação não estiver nos trechos, diga que não encontrou evidência suficiente."
+        )
+
+        qa_chain = RetrievalQA.from_chain_type(
+            llm=llm,
+            chain_type="stuff",
+            retriever=retriever,
+            return_source_documents=True,
+            verbose=False,
+            chain_type_kwargs={"prompt": None},  # Mantemos padrão; didática focada no fluxo
+        )
+
+        # Dica: em um próximo passo didático, você pode customizar prompts com LangChain templates.
+        _ = described_prompt  # mantém a ideia documentada sem “poluir” execução
+
+        return qa_chain, vectorstore, retriever, embeddings
+
+    except Exception as e:
+        logger.error(f"Erro ao inicializar pipeline: {e}")
+        return None, None, None, None
+
+
+def ensure_pipeline_ready() -> None:
+    """
+    Garante que o pipeline esteja inicializado no estado da sessão.
+
+    Heurística (Nielsen):
+    - Visibilidade do status do sistema.
+    - Prevenção de erros: não deixa o usuário “cair lembrar” de carregar pipeline.
+    """
+    if st.session_state.qa_chain is not None:
+        return
+
+    custom_docs = load_custom_docs()
+    docs = custom_docs if custom_docs else get_default_docs()
+
+    with st.spinner("Inicializando o modelo e a base de conhecimento…"):
+        qa_chain, vectorstore, retriever, embeddings = initialize_rag_pipeline(
+            docs_texts=docs,
+            retriever_k=st.session_state.retriever_k,
+            temperature=st.session_state.temperature,
+            max_new_tokens=st.session_state.max_new_tokens,
+        )
+
+    if qa_chain is None:
+        st.error("Não foi possível inicializar o pipeline. Verifique dependências e tente novamente.")
+        st.stop()
+
+    st.session_state.qa_chain = qa_chain
+    st.session_state.vectorstore = vectorstore
+    st.session_state.retriever = retriever
+    st.session_state.embeddings = embeddings
+    st.session_state.docs = docs
+
+
+# =============================================================================
+# Sidebar (navegação, configurações, ajuda)
+# =============================================================================
+
+def render_sidebar() -> None:
+    """
+    Barra lateral com:
+    - Navegação
+    - Configurações (Top-k, temperatura, tokens)
+    - Status do sistema
+
+    Heurísticas (Nielsen) atendidas:
+    - Consistência e padrões (mesma navegação sempre).
+    - Controle e liberdade (recarregar, reset, aplicar configurações).
+    - Ajuda e documentação (atalhos para Glossário).
+    """
+    with st.sidebar:
+        st.markdown(f"### {APP_SHORT}")
+        st.caption("Navegação e configurações")
+
+        st.session_state.page = st.radio(
+            "Ir para",
+            options=["Chat", "Documentos", "Glossário & Ajuda"],
+            index=["Chat", "Documentos", "Glossário & Ajuda"].index(st.session_state.page),
+            label_visibility="collapsed",
+        )
+
+        st.markdown("---")
+
+        with st.expander("Configurações do pipeline", expanded=True):
+            st.caption("Ajustes que afetam busca e geração. Veja o significado no Glossário.")
+
+            new_k = st.slider("Top-k (k): trechos recuperados", 1, 8, int(st.session_state.retriever_k))
+            new_temp = st.slider("Temperatura (criatividade)", 0.0, 1.2, float(st.session_state.temperature), 0.05)
+            new_tokens = st.slider("Tamanho máximo da resposta (tokens)", 64, 1024, int(st.session_state.max_new_tokens), 32)
+
+            cols = st.columns(2)
+            apply_clicked = cols[0].button("Aplicar", use_container_width=True)
+            reset_clicked = cols[1].button("Padrão", use_container_width=True)
+
+            if reset_clicked:
+                st.session_state.retriever_k = 3
+                st.session_state.temperature = 0.7
+                st.session_state.max_new_tokens = 512
+                st.cache_resource.clear()
+                st.session_state.qa_chain = None
+                st.session_state.toast = "Configurações restauradas para o padrão."
+                st.rerun()
+
+            if apply_clicked:
+                st.session_state.retriever_k = int(new_k)
+                st.session_state.temperature = float(new_temp)
+                st.session_state.max_new_tokens = int(new_tokens)
+
+                # Para aplicar de fato no LLM (temp/tokens), reinicializamos o pipeline (custo: tempo).
+                st.cache_resource.clear()
+                st.session_state.qa_chain = None
+                st.session_state.toast = "Configurações aplicadas. O pipeline será recarregado."
+                st.rerun()
+
+        st.markdown("---")
+
+        # Status do sistema
+        stats = get_system_stats()
+        safety = check_system_safety()
+
+        status_color = "state-ok" if safety["overall_safe"] else "state-warn"
+        st.markdown(f"**Status do sistema:** <span class='{status_color}'>●</span>", unsafe_allow_html=True)
+        st.caption("Recursos locais (para evitar travamentos).")
+
+        st.write(f"RAM: {stats['ram_used_gb']:.1f} / {stats['ram_total_gb']:.1f} GB")
+        st.write(f"Documentos indexados: {int(stats['total_docs']):,}")
+        st.write(f"Vetores (FAISS): {int(stats['total_vectors']):,}")
+
+        if not safety["overall_safe"]:
+            st.warning("Uso alto de recursos. Considere reduzir PDFs ou quantidade de trechos.")
+
+
+# =============================================================================
+# Páginas
+# =============================================================================
+
+def page_chat() -> None:
+    """
+    Página de chat (pergunta -> busca -> resposta + evidências).
+
+    Heurísticas (Nielsen) destacadas:
+    - Visibilidade do status: spinner, tempo de resposta, fontes.
+    - Reconhecimento em vez de memorização: perguntas de exemplo.
+    - Ajuda e documentação: links para Glossário.
+    - Design minimalista: sem excesso de elementos decorativos.
+    """
+    render_header()
+
+    # Feedback pós-rerun
+    if st.session_state.toast:
+        st.info(st.session_state.toast)
+        st.session_state.toast = None
+
+    col_left, col_right = st.columns([2.2, 1])
+
+    with col_left:
+        card(
+            "Pergunte ao modelo",
+            """
+            Use perguntas curtas e diretas. Para respostas mais “ancoradas”, suba PDFs na aba **Documentos**.
+            """,
+            pills=["RAG", "LLM local", "Evidências"],
+        )
+
+        query = st.text_area(
+            "Pergunta",
+            placeholder="Ex.: O que é RAG? Como embeddings ajudam na busca? O que é Deep Learning?",
+            height=110,
+            key="chat_input",
+            label_visibility="collapsed",
+        )
+
+        st.markdown("**Sugestões (clique para preencher):**")
+        btn_cols = st.columns(3)
+
+        examples = [
+            ("O que é RAG?", "Explique o que é RAG e por que ele ajuda a reduzir alucinações."),
+            ("Embeddings", "O que são representações vetoriais (embeddings) e para que servem?"),
+            ("FAISS", "O que é FAISS e como ele ajuda a encontrar documentos similares?"),
         ]
-        
-        for i, (btn_text, query_text) in enumerate(example_queries):
-            with [col_btn1, col_btn2, col_btn3][i]:
-                if st.button(btn_text, use_container_width=True):
-                    st.session_state.chat_input = query_text
-                    st.rerun()
-        
-        search_button = st.button("🔍 Buscar Resposta", type="primary", use_container_width=True)
-        
-        if search_button and query.strip():
-            with st.spinner("🤔 Processando sua pergunta..."):
+
+        for i, (label, text) in enumerate(examples):
+            if btn_cols[i].button(label, use_container_width=True):
+                st.session_state["chat_input"] = text
+                st.rerun()
+
+        ask = st.button("Buscar resposta", type="primary", use_container_width=True)
+
+        if ask:
+            if not query.strip():
+                st.warning("Digite uma pergunta antes de buscar.")
+                return
+
+            safety = check_system_safety()
+            if not safety["overall_safe"]:
+                st.error("Recursos do sistema estão altos. Reduza documentos/trechos e tente novamente.")
+                return
+
+            with st.spinner("Processando… (buscando trechos relevantes e gerando resposta)"):
                 try:
-                    start_time = time.time()
+                    start = time.time()
                     response = st.session_state.qa_chain.invoke({"query": query})
-                    response_time = time.time() - start_time
-                    
+                    elapsed = time.time() - start
+
                     answer, source_docs = format_response(response)
-                    
-                    st.session_state.query_history.append({
-                        "query": query,
-                        "answer": answer,
-                        "time": response_time,
-                        "timestamp": time.strftime("%H:%M:%S")
-                    })
-                    
-                    st.markdown('<div class="response-card">', unsafe_allow_html=True)
-                    st.markdown(f"**🤖 Resposta:**\n\n{answer}")
-                    st.markdown(f"⏱️ *Tempo de resposta: {response_time:.2f}s*")
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    
+
+                    st.session_state.query_history.append(
+                        {
+                            "query": query,
+                            "answer": answer,
+                            "time": elapsed,
+                            "timestamp": time.strftime("%H:%M:%S"),
+                        }
+                    )
+
+                    card(
+                        "Resposta",
+                        f"""
+                        **Texto gerado:**
+                        {answer}
+
+                        <br/>
+
+                        <span class="miguel-pill">Tempo: {elapsed:.2f}s</span>
+                        """,
+                        pills=["Resposta", "Tempo", "Clareza"],
+                    )
+
+                    # Evidências (progressive disclosure — Nielsen: minimalist + ajuda quando necessário)
                     if source_docs:
-                        st.markdown("**📄 Documentos utilizados:**")
-                        for i, doc in enumerate(source_docs[:2], 1):
-                            with st.expander(f"📋 Fonte {i}"):
-                                st.markdown(f'<div class="doc-card">{doc.page_content}</div>', 
-                                          unsafe_allow_html=True)
-                    
+                        st.subheader("Evidências utilizadas (trechos recuperados)")
+                        st.caption("Mostramos os trechos que mais contribuíram para a resposta. Isso ajuda a aprender o fluxo do RAG.")
+
+                        for idx, doc in enumerate(source_docs[: min(3, len(source_docs))], 1):
+                            with st.expander(f"Trecho {idx}", expanded=(idx == 1)):
+                                st.write(doc.page_content)
+
                 except Exception as e:
-                    st.error(f"❌ Erro ao processar pergunta: {str(e)}")
-                    logger.error(f"Erro no processamento: {e}")
-        
-        elif search_button:
-            st.warning("⚠️ Por favor, digite uma pergunta antes de buscar!")
-    
-    with col2:
-        st.header("📈 Estatísticas")
-        
-        if 'query_history' in st.session_state and st.session_state.query_history:
-            total_queries = len(st.session_state.query_history)
-            avg_time = sum(q["time"] for q in st.session_state.query_history) / total_queries
-            last_query_time = st.session_state.query_history[-1]["time"]
-            
-            st.metric("🔢 Total de Perguntas", total_queries)
-            st.metric("⏱️ Tempo Médio", f"{avg_time:.2f}s")
-            st.metric("🕐 Última Consulta", f"{last_query_time:.2f}s")
+                    logger.error(f"Erro ao responder: {e}")
+                    st.error("Ocorreu um erro ao gerar a resposta. Tente novamente ou reduza documentos.")
+
+
+    with col_right:
+        # Estatísticas rápidas (visibilidade do status)
+        history = st.session_state.query_history
+        total = len(history)
+
+        if total:
+            avg = sum(x["time"] for x in history) / total
+            last = history[-1]["time"]
         else:
-            st.metric("🔢 Total de Perguntas", "0")
-            st.metric("⏱️ Tempo Médio", "-")
-            st.metric("🕐 Última Consulta", "-")
-        
-        st.header("📚 Base de Conhecimento")
-        st.info(f"📄 {len(st.session_state.docs)} documentos indexados")
-        
-        with st.expander("👁️ Ver documentos"):
-            for i, doc in enumerate(st.session_state.docs[:5], 1):
-                st.markdown(f"**{i}.** {doc[:100]}...")
-            if len(st.session_state.docs) > 5:
-                st.markdown(f"*... e mais {len(st.session_state.docs) - 5} documentos*")
+            avg, last = None, None
 
-    if 'query_history' in st.session_state and st.session_state.query_history:
-        st.header("📋 Histórico de Perguntas")
-        recent_history = st.session_state.query_history[-5:]
-        
-        for item in reversed(recent_history):
-            with st.expander(f"🕐 {item['timestamp']} - {item['query'][:50]}..."):
-                st.markdown(f"**Pergunta:** {item['query']}")
-                st.markdown(f"**Resposta:** {item['answer']}")
-                st.markdown(f"**Tempo:** {item['time']:.2f}s")
+        card(
+            "Métricas da sessão",
+            f"""
+            - Total de perguntas: **{total}**
+            - Tempo médio: **{avg:.2f}s**  \n
+              {"" if avg is not None else "-"}
+            - Última pergunta: **{last:.2f}s**  \n
+              {"" if last is not None else "-"}
+            """,
+            pills=["Observação", "Transparência"],
+        )
 
-def manage_documents_page():
-    """Página de gerenciamento de documentos"""
-    st.markdown('<div class="main-header">📚 Gerenciar Base de Conhecimento</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Adicione documentos PDF para expandir o conhecimento da IA</div>', unsafe_allow_html=True)
-    
-    st.header("📤 Upload de Documentos")
-    st.markdown("**📄 Adicione arquivos PDF para expandir a base de conhecimento**")
-    
-    uploaded_files = st.file_uploader(
-        "Selecione arquivos PDF:",
-        type=['pdf'],
-        accept_multiple_files=True,
-        help="Você pode selecionar múltiplos arquivos PDF para upload simultâneo."
+        card(
+            "Base de conhecimento",
+            f"""
+            - Documentos indexados: **{len(st.session_state.docs)}**
+            - Top-k atual: **{st.session_state.retriever_k}**
+
+            Dica: envie PDFs na aba **Documentos** para enriquecer a base.
+            """,
+            pills=["Docs", "Top-k"],
+        )
+
+    # Histórico (reconhecimento — permite revisitar sem “lembrar”)
+    if st.session_state.query_history:
+        st.markdown("---")
+        st.subheader("Histórico recente")
+        for item in reversed(st.session_state.query_history[-5:]):
+            with st.expander(f"{item['timestamp']} — {item['query'][:60]}"):
+                st.write(f"**Pergunta:** {item['query']}")
+                st.write(f"**Resposta:** {item['answer']}")
+                st.write(f"**Tempo:** {item['time']:.2f}s")
+
+
+def page_documents() -> None:
+    """
+    Página de documentos (upload + processamento + atualização do pipeline).
+
+    Heurísticas (Nielsen) destacadas:
+    - Controle e liberdade: reset com confirmação.
+    - Prevenção de erros: limite de chunks, checagem de recursos.
+    - Visibilidade do status: barra de progresso e mensagens claras.
+    """
+    render_header()
+
+    card(
+        "Gerenciar base de conhecimento",
+        """
+        Envie PDFs para ampliar o conhecimento do sistema. O texto será dividido em trechos (chunking),
+        transformado em representações vetoriais (embeddings) e indexado no FAISS para busca por similaridade.
+        """,
+        pills=["PDF", "Chunking", "FAISS"],
     )
-    
+
+    uploaded_files = st.file_uploader(
+        "Enviar PDFs",
+        type=["pdf"],
+        accept_multiple_files=True,
+        help="Dica: comece com 1 PDF pequeno para observar o comportamento do RAG.",
+    )
+
     if uploaded_files:
-        st.markdown(f"**{len(uploaded_files)} arquivo(s) selecionado(s)**")
-        
-        for file in uploaded_files:
-            st.markdown(f"• {file.name} ({file.size / 1024:.1f} KB)")
-        
-        if st.button("🚀 Processar e Adicionar à Base", type="primary", use_container_width=True):
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            try:
-                all_new_docs = []
-                new_texts = []
-                
-                for i, uploaded_file in enumerate(uploaded_files):
-                    status_text.text(f"📄 Processando {uploaded_file.name}...")
-                    progress_bar.progress((i + 0.5) / len(uploaded_files))
-                    
-                    try:
-                        docs, warnings = process_pdf_safely(uploaded_file, max_chunks_per_file=200)
-                        all_new_docs.extend(docs)
-                        
-                        for warning in warnings:
-                            if "⚠️" in warning:
-                                st.warning(f"{uploaded_file.name}: {warning}")
-                        
-                        for doc in docs:
-                            new_texts.append(doc.page_content)
-                        
-                        st.markdown(f'<div class="success-card">✅ {uploaded_file.name}: {len(docs)} chunks extraídos</div>', 
-                                  unsafe_allow_html=True)
-                        
-                        current_safety = check_system_safety()
-                        if not current_safety['current_ram_safe']:
-                            st.error("⛔ Recursos críticos! Interrompendo processamento.")
-                            break
-                        
-                    except Exception as e:
-                        st.markdown(f'<div class="warning-card">❌ Erro ao processar {uploaded_file.name}: {e}</div>', 
-                                  unsafe_allow_html=True)
-                        continue
-                
-                if new_texts:
-                    status_text.text("🔄 Atualizando base de conhecimento...")
-                    progress_bar.progress(0.9)
-                    
-                    updated_docs = st.session_state.docs + new_texts
-                    
-                    if save_custom_docs(updated_docs):
-                        st.cache_resource.clear()
-                        
-                        qa_chain, vectorstore, docs, retriever, embeddings = initialize_rag_pipeline(updated_docs)
-                        
-                        if qa_chain:
-                            st.session_state.qa_chain = qa_chain
-                            st.session_state.vectorstore = vectorstore
-                            st.session_state.docs = docs
-                            st.session_state.retriever = retriever
-                            st.session_state.embeddings = embeddings
-                            
-                            progress_bar.progress(1.0)
-                            status_text.text("✅ Processamento concluído!")
-                            
-                            st.markdown(f'<div class="success-card">🎉 <strong>Sucesso!</strong> {len(new_texts)} novos documentos adicionados à base de conhecimento.</div>', 
-                                      unsafe_allow_html=True)
-                        else:
-                            st.error("❌ Erro ao reinicializar pipeline com novos documentos.")
-                    else:
-                        st.error("❌ Erro ao salvar documentos atualizados.")
-                else:
-                    st.warning("⚠️ Nenhum documento foi processado com sucesso.")
-                    
-            except Exception as e:
-                st.error(f"❌ Erro durante o processamento: {e}")
-                status_text.text("❌ Erro no processamento")
-                progress_bar.progress(0)
-    
+        st.caption(f"{len(uploaded_files)} arquivo(s) selecionado(s).")
+        for f in uploaded_files:
+            st.write(f"- {f.name} ({f.size / 1024:.1f} KB)")
+
+        process = st.button("Processar e adicionar à base", type="primary", use_container_width=True)
+
+        if process:
+            safety = check_system_safety()
+            if not safety["overall_safe"]:
+                st.error("Recursos do sistema estão altos. Feche apps e tente novamente, ou envie PDFs menores.")
+                return
+
+            progress = st.progress(0)
+            status = st.empty()
+
+            new_texts: List[str] = []
+            warnings_all: List[str] = []
+
+            for i, f in enumerate(uploaded_files, start=1):
+                status.text(f"Processando: {f.name}")
+                progress.progress(int((i - 0.25) / len(uploaded_files) * 100) / 100)
+
+                docs, warns = process_pdf_safely(f, max_chunks_per_file=200)
+                warnings_all.extend([f"{f.name}: {w}" for w in warns])
+
+                for d in docs:
+                    new_texts.append(d.page_content)
+
+                # checagem de segurança contínua
+                safety_now = check_system_safety()
+                if not safety_now["ram_safe"]:
+                    warnings_all.append("Uso de RAM alto: interrompemos processamento para evitar travamento.")
+                    break
+
+                progress.progress(int(i / len(uploaded_files) * 100) / 100)
+
+            if warnings_all:
+                with st.expander("Avisos do processamento"):
+                    for w in warnings_all:
+                        st.warning(w)
+
+            if not new_texts:
+                st.warning("Nenhum texto foi extraído. Tente outro PDF.")
+                return
+
+            status.text("Atualizando base e reinicializando pipeline…")
+            updated_docs = (st.session_state.docs or []) + new_texts
+
+            if save_custom_docs(updated_docs):
+                # Recarrega pipeline com cache limpo
+                st.cache_resource.clear()
+                st.session_state.qa_chain = None
+                st.session_state.docs = updated_docs
+                ensure_pipeline_ready()
+                status.text("Concluído.")
+                st.success(f"{len(new_texts)} trechos adicionados à base.")
+            else:
+                st.error("Não foi possível salvar os documentos. Verifique permissões de escrita em disco.")
+                return
+
     st.markdown("---")
-    st.header("📊 Informações da Base Atual")
-    
+
+    # Info base atual
     stats = get_system_stats()
     limits = get_theoretical_limits()
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.markdown(f"**📄 Documentos**\n{stats['total_docs']:,}")
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.markdown(f"**🔢 Vetores**\n{stats['total_vectors']:,}")
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.markdown(f"**💾 FAISS**\n{stats['faiss_size_mb']:.1f} MB")
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    st.header("🔧 Recursos do Sistema")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**💾 Memória RAM:**")
-        ram_usage = (stats['ram_used'] / stats['ram_total']) * 100
-        st.progress(ram_usage / 100)
-        st.markdown(f"**{stats['ram_used']:.1f} GB** / {stats['ram_total']:.1f} GB ({ram_usage:.1f}%)")
-        
-        if ram_usage > 80:
-            st.warning("⚠️ Uso alto de memória!")
-        elif ram_usage > 60:
-            st.info("ℹ️ Uso moderado de memória")
-        else:
-            st.success("✅ Uso normal de memória")
-    
-    with col2:
-        st.markdown("**📈 Limites Teóricos:**")
-        st.info(f"🔢 **Max. Vetores:** {limits['max_vectors_ram']:,}")
-        st.info(f"📄 **Max. Documentos:** {limits['max_docs_estimate']:,}")
-        st.info(f"💾 **Max. FAISS:** {limits['max_faiss_size_gb']:.1f} GB")
-        st.info(f"📝 **Context Window:** {limits['max_context_tokens']} tokens")
-    
-    st.header("🔍 Testar Base de Conhecimento")
-    test_query = st.text_input(
-        "Digite uma consulta para testar:",
-        placeholder="Ex: machine learning, churn, RAG",
-        key="test_query"
-    )
-    
-    if st.button("🔍 Buscar documentos similares") and test_query:
-        with st.spinner("🔍 Buscando documentos similares..."):
-            try:
-                retriever = st.session_state.retriever
-                docs = retriever.get_relevant_documents(test_query)
-                
-                if docs:
-                    st.markdown("**📄 Documentos encontrados:**")
-                    for i, doc in enumerate(docs[:3], 1):
-                        with st.expander(f"📋 Documento {i}", expanded=i==1):
-                            st.markdown(f'<div class="doc-card">{doc.page_content}</div>', 
-                                      unsafe_allow_html=True)
-                else:
-                    st.info("ℹ️ Nenhum documento relevante encontrado.")
-                    
-            except Exception as e:
-                st.error(f"❌ Erro na busca: {e}")
-    
-    st.markdown("---")
-    st.header("🛠️ Gerenciamento Avançado")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("🔄 Recarregar Pipeline", use_container_width=True):
-            with st.spinner("🔄 Recarregando pipeline..."):
-                st.cache_resource.clear()
-                st.rerun()
-    
-    with col2:
-        if st.button("⚠️ Resetar Base", use_container_width=True):
-            if st.checkbox("✅ Confirmo que quero resetar para documentos padrão"):
-                try:
-                    if os.path.exists("data/custom_docs.pkl"):
-                        os.remove("data/custom_docs.pkl")
-                    
-                    st.cache_resource.clear()
-                    st.success("✅ Base resetada! Recarregue a página para aplicar.")
-                    
-                except Exception as e:
-                    st.error(f"❌ Erro ao resetar: {e}")
 
-def main():
-    """Função principal da aplicação"""
-    # Inicializar estado da sessão
-    if 'current_page' not in st.session_state:
-        st.session_state.current_page = "chat"
-    
-    if 'query_history' not in st.session_state:
-        st.session_state.query_history = []
-    
-    # Mostrar sidebar
-    show_sidebar()
-    
-    # Inicializar pipeline (apenas uma vez)
-    if 'qa_chain' not in st.session_state:
-        custom_docs = load_custom_docs()
-        qa_chain, vectorstore, docs, retriever, embeddings = initialize_rag_pipeline(custom_docs)
-        
-        if qa_chain:
-            st.session_state.qa_chain = qa_chain
-            st.session_state.vectorstore = vectorstore
-            st.session_state.docs = docs
-            st.session_state.retriever = retriever
-            st.session_state.embeddings = embeddings
-        else:
-            st.stop()
-    
-    # Renderizar página baseada na seleção
-    if st.session_state.current_page == "chat":
-        chat_page()
-    else:
-        manage_documents_page()
-    
-    # Footer
+    cols = st.columns(3)
+    cols[0].metric("Documentos (strings)", int(stats["total_docs"]))
+    cols[1].metric("Vetores (FAISS)", int(stats["total_vectors"]))
+    cols[2].metric("FAISS (estimado)", f"{stats['faiss_size_mb']:.1f} MB")
+
+    with st.expander("Ver amostra dos documentos indexados"):
+        docs = st.session_state.docs or []
+        for i, d in enumerate(docs[:8], 1):
+            st.write(f"{i}. {d[:180]}{'…' if len(d) > 180 else ''}")
+        if len(docs) > 8:
+            st.caption(f"… e mais {len(docs) - 8} documento(s).")
+
+    with st.expander("Limites (referências didáticas)"):
+        st.write(f"- Máx. vetores (estimativa): {limits['max_vectors_estimate']:,}")
+        st.write(f"- Máx. documentos (estimativa): {limits['max_docs_estimate']:,}")
+        st.write(f"- Máx. FAISS (estimativa): {limits['max_faiss_size_gb']:.1f} GB")
+        st.write(f"- Janela de contexto (estimativa): {limits['context_window_tokens_estimate']} tokens")
+
     st.markdown("---")
-    st.markdown("""
-    <div style='text-align: center; color: #636e72;'>
-        🚀 Desenvolvido com Streamlit | 🤖 Powered by HuggingFace & LangChain
-        <br>
-        💡 Sistema RAG 100% gratuito e local | 📄 Agora com suporte a upload de PDFs
-    </div>
-    """, unsafe_allow_html=True)
+
+    # Reset com confirmação (controle e liberdade + prevenção de erros)
+    st.subheader("Gerenciamento avançado")
+    col_a, col_b = st.columns(2)
+
+    if col_a.button("Recarregar pipeline", use_container_width=True):
+        st.cache_resource.clear()
+        st.session_state.qa_chain = None
+        st.session_state.toast = "Pipeline recarregado."
+        st.rerun()
+
+    with col_b:
+        confirm = st.checkbox("Confirmo que desejo voltar para a base padrão (isso remove meus PDFs)")
+        if st.button("Resetar base", use_container_width=True, disabled=not confirm):
+            try:
+                if os.path.exists(CUSTOM_DOCS_PATH):
+                    os.remove(CUSTOM_DOCS_PATH)
+                st.cache_resource.clear()
+                st.session_state.qa_chain = None
+                st.session_state.docs = get_default_docs()
+                st.session_state.toast = "Base resetada para o padrão."
+                st.rerun()
+            except Exception as e:
+                logger.error(f"Erro ao resetar base: {e}")
+                st.error("Não foi possível resetar. Verifique permissões de arquivo.")
+
+
+def page_glossary_help() -> None:
+    """
+    Página de ajuda: glossário + heurísticas de Nielsen + Gestalt.
+
+    Requisito 3 (Gestalt):
+    - Explicamos e também aplicamos no layout (cards, agrupamentos, proximidade, contraste).
+
+    Requisito 4 (termos técnicos):
+    - Glossário com termos “interativos” (k, temperatura, tokens, RAG, etc.).
+    """
+    render_header()
+
+    card(
+        "Glossário (termos técnicos do aplicativo)",
+        """
+        Selecione um termo e veja **o que é**, **onde aparece no app** e **por que importa**.
+        A ideia é que o aluno consiga explorar o sistema sem depender de “jargão”.
+        """,
+        pills=["Didático", "Autoexplicativo"],
+    )
+
+    term = st.selectbox("Escolha um termo", list(GLOSSARY.keys()))
+    info = GLOSSARY[term]
+
+    st.markdown("#### Termo selecionado")
+    card(
+        term,
+        f"""
+        **O que é:** {info["o_que_e"]}
+
+        **Onde aparece no aplicativo:** {info["onde_aparece_no_app"]}
+
+        **Por que é importante:** {info["por_que_importa"]}
+        """,
+        pills=["Definição", "Uso no app", "Importância"],
+    )
+
+    st.markdown("---")
+
+    card(
+        "Heurísticas de Nielsen (como melhoramos a usabilidade)",
+        """
+        **Visibilidade do status:** spinners, progresso e métricas (tempo, docs, vetores).  
+        **Correspondência com o mundo real:** linguagem simples (“trechos”, “evidências”, “pergunta”).  
+        **Controle e liberdade:** reset com confirmação e recarregar pipeline.  
+        **Consistência e padrões:** navegação fixa e rótulos uniformes.  
+        **Prevenção de erros:** limites de chunks e checagem de recursos.  
+        **Reconhecimento em vez de memorização:** exemplos clicáveis e histórico.  
+        **Design minimalista:** cores neutras e menos ruído visual.  
+        **Ajuda e documentação:** este glossário + textos de apoio nas páginas.
+        """,
+        pills=["Nielsen", "UX", "Didática"],
+    )
+
+    card(
+        "Princípios da Gestalt (o que você vê na interface)",
+        """
+        **Proximidade:** itens relacionados ficam juntos (ex.: configurações do pipeline).  
+        **Similaridade:** cards e métricas têm o mesmo estilo, facilitando leitura rápida.  
+        **Região comum:** blocos com borda e fundo agrupam conceitos (ex.: “Resposta” e “Evidências”).  
+        **Figura-fundo:** contraste alto (texto claro sobre fundo escuro) melhora legibilidade.  
+        **Continuidade:** fluxo de leitura vertical (Pergunta → Resposta → Evidências → Histórico).  
+        **Fechamento:** expanders permitem “ver mais” sem poluir a tela (progressive disclosure).
+        """,
+        pills=["Gestalt", "Layout", "Percepção"],
+    )
+
+
+# =============================================================================
+# Main
+# =============================================================================
+
+def main() -> None:
+    """Ponto de entrada do app."""
+    inject_minimal_css()
+    init_session_state()
+    render_sidebar()
+
+    # Pipeline pronto antes de qualquer página (prevenção de erros)
+    ensure_pipeline_ready()
+
+    if st.session_state.page == "Chat":
+        page_chat()
+    elif st.session_state.page == "Documentos":
+        page_documents()
+    else:
+        page_glossary_help()
+
+    st.markdown("---")
+    st.caption(
+        f"{APP_SHORT} — aplicação didática, local e gratuita | "
+        "Tecnologias: LangChain, HuggingFace, FAISS, Streamlit"
+    )
+
 
 if __name__ == "__main__":
     main()
