@@ -4,7 +4,7 @@ MIGUEL — Modelo Interativo Generativo de Linguagem para Uso Educacional Livre
 
 Aplicativo didático (Streamlit) que demonstra um pipeline RAG (Retrieval-Augmented Generation)
 com componentes 100% locais e gratuitos:
-- Embeddings (MiniLM) + FAISS (busca por similaridade)
+- Representações vetoriais (MiniLM) + FAISS (busca por similaridade)
 - LLM (FLAN-T5) para geração de resposta
 - Upload de PDFs para ampliar a base de conhecimento
 
@@ -19,6 +19,9 @@ Requisitos atendidos (resumo):
 5) Docstrings didáticas adicionadas/melhoradas.
 6) Sem emoji de foguete no título.
 7) Paleta minimalista (azul escuro + branco + cinza).
+
+Correção adicional:
+- Evita TypeError ao formatar métricas quando o histórico ainda está vazio.
 """
 
 from __future__ import annotations
@@ -40,12 +43,11 @@ import streamlit as st
 
 APP_NAME = "Modelo Interativo Generativo de Linguagem para Uso Educacional Livre"
 APP_SHORT = "MIGUEL"
-APP_SUBTITLE = "Aplicativo didático (RAG) com LLM local, Embeddings e FAISS — sem API keys"
+APP_SUBTITLE = "Aplicativo didático (RAG) com LLM local, representações vetoriais e FAISS — sem API keys"
 
-# Evite usar emojis chamativos no título e mantenha uma estética minimalista
 st.set_page_config(
     page_title=f"{APP_SHORT} — {APP_NAME}",
-    page_icon="🧩",  # discreto
+    page_icon="🧩",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -59,37 +61,28 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 def inject_minimal_css() -> None:
-    """
-    Injeta CSS minimalista (azul escuro + branco + cinza).
-
-    Princípios aplicados:
-    - Figura-fundo (alto contraste para leitura).
-    - Proximidade e região comum (cards e blocos com borda suave).
-    - Consistência (mesmos espaçamentos, tipografia e estilos).
-    """
+    """Injeta CSS minimalista e consistente (Gestalt + legibilidade)."""
     st.markdown(
         """
         <style>
           :root{
-            --bg: #0b1220;         /* azul bem escuro */
-            --panel: #0f172a;      /* painéis */
-            --text: #e5e7eb;       /* texto */
-            --muted: #9ca3af;      /* texto secundário */
-            --line: #24314a;       /* bordas */
-            --accent: #2563eb;     /* azul */
+            --bg: #0b1220;
+            --panel: #0f172a;
+            --text: #e5e7eb;
+            --muted: #9ca3af;
+            --line: #24314a;
+            --accent: #2563eb;
             --ok: #16a34a;
             --warn: #f59e0b;
             --err: #ef4444;
             --card: #0c1528;
           }
 
-          /* Fundo geral (Streamlit já controla muita coisa; reforçamos contraste) */
           .stApp {
             background: linear-gradient(180deg, var(--bg) 0%, #070b14 100%);
             color: var(--text);
           }
 
-          /* Título principal */
           .miguel-title {
             font-size: 2.1rem;
             font-weight: 800;
@@ -105,7 +98,6 @@ def inject_minimal_css() -> None:
             margin: 0 0 1.25rem 0;
           }
 
-          /* Cards / blocos */
           .miguel-card {
             background: rgba(12, 21, 40, 0.95);
             border: 1px solid var(--line);
@@ -135,20 +127,12 @@ def inject_minimal_css() -> None:
             margin-right: 0.35rem;
           }
 
-          /* Destaques de estado (visibilidade do status do sistema — Nielsen) */
           .state-ok    { color: var(--ok); }
           .state-warn  { color: var(--warn); }
           .state-err   { color: var(--err); }
 
-          /* Expander mais “limpo” */
-          details, summary {
-            color: var(--text);
-          }
-
-          /* Ajuste de links */
           a { color: #93c5fd; }
 
-          /* Remover excesso de margens do container de conteúdo */
           .block-container {
             padding-top: 1.0rem;
           }
@@ -159,19 +143,19 @@ def inject_minimal_css() -> None:
 
 
 def render_header() -> None:
-    """Renderiza o cabeçalho do app (título + subtítulo), sem emoji de foguete."""
+    """Renderiza cabeçalho do app (sem emoji de foguete)."""
     st.markdown(f"<div class='miguel-title'>{APP_NAME}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='miguel-subtitle'>{APP_SUBTITLE}</div>", unsafe_allow_html=True)
 
 
 def card(title: str, body_md: str, pills: Optional[List[str]] = None) -> None:
     """
-    Renderiza um card simples para agrupar conteúdo (Gestalt: região comum + proximidade).
+    Renderiza um card para agrupar conteúdo (Gestalt: região comum + proximidade).
 
     Args:
         title: Título do card.
-        body_md: Conteúdo em Markdown.
-        pills: Pequenos rótulos (chips) para reforçar "similaridade" e "escaneabilidade".
+        body_md: Conteúdo em Markdown/HTML simples.
+        pills: Pequenos rótulos para reforçar a leitura (similaridade).
     """
     pills_html = ""
     if pills:
@@ -199,11 +183,7 @@ CUSTOM_DOCS_PATH = os.path.join(DATA_DIR, "custom_docs.pkl")
 
 def init_session_state() -> None:
     """
-    Inicializa variáveis em st.session_state para evitar erros e manter consistência (Nielsen).
-
-    Heurísticas atendidas:
-    - Prevenção de erros (estado sempre existe antes do uso).
-    - Consistência e padrões (chaves fixas).
+    Inicializa variáveis em st.session_state para consistência e prevenção de erros.
     """
     st.session_state.setdefault("page", "Chat")
     st.session_state.setdefault("query_history", [])
@@ -213,29 +193,15 @@ def init_session_state() -> None:
     st.session_state.setdefault("retriever", None)
     st.session_state.setdefault("embeddings", None)
 
-    # Configurações interativas (explicadas no Glossário)
     st.session_state.setdefault("retriever_k", 3)
     st.session_state.setdefault("max_new_tokens", 512)
     st.session_state.setdefault("temperature", 0.7)
 
-    # Para UX: “mensagens” que sobrevivem a rerun (feedback)
     st.session_state.setdefault("toast", None)
 
 
 def save_custom_docs(docs_list: List[str]) -> bool:
-    """
-    Salva documentos personalizados em disco (arquivo pickle local).
-
-    Observação didática:
-    - Pickle é uma forma simples de guardar dados Python em arquivo.
-    - Em projetos reais, pode-se preferir JSON/DB — aqui o foco é ensino e simplicidade.
-
-    Args:
-        docs_list: Lista de strings com conteúdos textuais.
-
-    Returns:
-        True se salvou com sucesso; False caso contrário.
-    """
+    """Salva a lista de documentos customizados localmente em arquivo pickle."""
     try:
         os.makedirs(DATA_DIR, exist_ok=True)
         with open(CUSTOM_DOCS_PATH, "wb") as f:
@@ -247,12 +213,7 @@ def save_custom_docs(docs_list: List[str]) -> bool:
 
 
 def load_custom_docs() -> Optional[List[str]]:
-    """
-    Carrega documentos personalizados do arquivo local, se existir.
-
-    Returns:
-        Lista de documentos (strings) ou None caso não exista/erro.
-    """
+    """Carrega documentos customizados salvos, se existirem."""
     try:
         if os.path.exists(CUSTOM_DOCS_PATH):
             with open(CUSTOM_DOCS_PATH, "rb") as f:
@@ -268,13 +229,7 @@ def load_custom_docs() -> Optional[List[str]]:
 # =============================================================================
 
 def get_default_docs() -> List[str]:
-    """
-    Retorna uma base mínima de documentos de exemplo.
-
-    Por que isso existe?
-    - Serve para demonstrar o pipeline RAG “funcionando” mesmo sem upload.
-    - É propositalmente pequena para reduzir consumo de RAM/CPU em máquinas modestas.
-    """
+    """Retorna uma base mínima de documentos de exemplo para o pipeline."""
     return [
         "Churn é o cancelamento/abandono de clientes em um serviço. É uma métrica importante de retenção.",
         "NPS (Net Promoter Score) mede lealdade perguntando se o cliente recomendaria a empresa; varia de -100 a +100.",
@@ -322,18 +277,18 @@ GLOSSARY: Dict[str, Dict[str, str]] = {
     },
     "Top-k (k)": {
         "o_que_e": "Quantidade de trechos retornados pela busca por similaridade.",
-        "onde_aparece_no_app": "Configuração na barra lateral (Configurações).",
-        "por_que_importa": "Ajusta equilíbrio entre contexto suficiente e ruído excessivo.",
+        "onde_aparece_no_app": "Configuração na barra lateral (Configurações do pipeline).",
+        "por_que_importa": "Equilibra contexto suficiente e ruído excessivo.",
     },
     "Temperatura (temperature)": {
         "o_que_e": "Controla aleatoriedade do texto gerado: menor = mais previsível; maior = mais criativo.",
-        "onde_aparece_no_app": "Configuração na barra lateral (Configurações).",
+        "onde_aparece_no_app": "Configuração na barra lateral (Configurações do pipeline).",
         "por_que_importa": "Em contexto didático, valores menores tendem a gerar respostas mais consistentes.",
     },
     "max_new_tokens": {
-        "o_que_e": "Limite máximo de tokens (pedaços de texto) que o modelo pode gerar na resposta.",
-        "onde_aparece_no_app": "Configuração na barra lateral (Configurações).",
-        "por_que_importa": "Evita respostas longas demais e controla tempo de processamento.",
+        "o_que_e": "Limite máximo do tamanho da resposta (em tokens).",
+        "onde_aparece_no_app": "Configuração na barra lateral (Configurações do pipeline).",
+        "por_que_importa": "Controla custo de tempo/memória e evita respostas longas demais.",
     },
 }
 
@@ -343,13 +298,7 @@ GLOSSARY: Dict[str, Dict[str, str]] = {
 # =============================================================================
 
 def get_system_stats() -> Dict[str, float]:
-    """
-    Coleta estatísticas básicas do sistema (RAM) e do índice vetorial.
-
-    Objetivo didático:
-    - Mostrar que IA local consome recursos.
-    - Incentivar prática responsável (evitar travamentos por excesso de dados).
-    """
+    """Coleta estatísticas básicas do sistema e do índice vetorial."""
     ram = psutil.virtual_memory()
 
     faiss_size_mb = 0.0
@@ -360,7 +309,6 @@ def get_system_stats() -> Dict[str, float]:
         try:
             faiss_index = st.session_state.vectorstore.index
             total_vectors = int(faiss_index.ntotal)
-            # Estimativa simplificada de tamanho (não é “tamanho real em disco”)
             faiss_size_mb = (total_vectors * 4) / (1024 * 1024)
         except Exception as e:
             logger.warning(f"Erro ao obter dados do FAISS: {e}")
@@ -375,15 +323,7 @@ def get_system_stats() -> Dict[str, float]:
 
 
 def check_system_safety() -> Dict[str, Any]:
-    """
-    Verifica limites “seguros” de uso para evitar travamentos.
-
-    Heurística (Nielsen): prevenção de erros.
-    - Se RAM estiver muito alta, interrompemos operações pesadas.
-
-    Returns:
-        Dicionário com indicadores e status geral.
-    """
+    """Verifica limites “seguros” de uso para evitar travamentos por excesso de RAM/índice."""
     stats = get_system_stats()
     ram_usage_pct = stats["ram_used_gb"] / stats["ram_total_gb"] if stats["ram_total_gb"] else 0.0
     faiss_size_gb = stats["faiss_size_mb"] / 1024.0
@@ -401,13 +341,7 @@ def check_system_safety() -> Dict[str, Any]:
 
 
 def get_theoretical_limits() -> Dict[str, Any]:
-    """
-    Limites aproximados (didáticos) para orientar o usuário.
-
-    Observação:
-    - Esses valores não são “verdades absolutas”; variam por hardware e tamanho do texto.
-    - O foco é ajudar o público leigo a ter referências.
-    """
+    """Limites aproximados (didáticos) para orientar o usuário."""
     return {
         "max_vectors_estimate": 1_000_000,
         "max_docs_estimate": 20_000,
@@ -421,20 +355,7 @@ def get_theoretical_limits() -> Dict[str, Any]:
 # =============================================================================
 
 def process_pdf(uploaded_file) -> List[Any]:
-    """
-    Extrai texto de um PDF e divide em trechos (chunks) com sobreposição.
-
-    Para leigos:
-    - PDF é um formato difícil de “ler” diretamente como texto.
-    - O loader converte páginas em texto.
-    - Depois cortamos em partes menores para facilitar indexação e busca.
-
-    Args:
-        uploaded_file: Arquivo enviado via Streamlit (st.file_uploader).
-
-    Returns:
-        Lista de Document objects (LangChain) com page_content.
-    """
+    """Extrai texto de um PDF e divide em trechos (chunks) com sobreposição."""
     tmp_file_path = None
     try:
         from langchain_community.document_loaders import PyPDFLoader
@@ -447,13 +368,13 @@ def process_pdf(uploaded_file) -> List[Any]:
         loader = PyPDFLoader(tmp_file_path)
         pages = loader.load()
 
-        text_splitter = RecursiveCharacterTextSplitter(
+        splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200,
             length_function=len,
         )
 
-        return text_splitter.split_documents(pages)
+        return splitter.split_documents(pages)
 
     except Exception as e:
         logger.error(f"Erro ao processar PDF: {e}")
@@ -467,20 +388,7 @@ def process_pdf(uploaded_file) -> List[Any]:
 
 
 def process_pdf_safely(uploaded_file, max_chunks_per_file: int = 200) -> Tuple[List[Any], List[str]]:
-    """
-    Versão “segura” do processamento: limita a quantidade de chunks.
-
-    Por que limitar?
-    - Muitos chunks podem consumir muita RAM e deixar o app lento.
-    - Para fins didáticos, é melhor subir poucos documentos e observar o pipeline.
-
-    Args:
-        uploaded_file: PDF enviado.
-        max_chunks_per_file: Limite de trechos por arquivo.
-
-    Returns:
-        (docs, warnings) — lista de documentos e avisos amigáveis.
-    """
+    """Processa PDF com segurança limitando a quantidade de chunks."""
     warnings: List[str] = []
     try:
         loaded_docs = process_pdf(uploaded_file)
@@ -498,17 +406,7 @@ def process_pdf_safely(uploaded_file, max_chunks_per_file: int = 200) -> Tuple[L
 # =============================================================================
 
 def format_response(response_data: Dict[str, Any]) -> Tuple[str, List[Any]]:
-    """
-    Normaliza a resposta do pipeline RAG para exibição.
-
-    Para leigos:
-    - O pipeline pode devolver um dicionário com:
-      - result: texto final
-      - source_documents: trechos usados como evidência
-
-    Returns:
-        (answer, source_docs)
-    """
+    """Normaliza a resposta do pipeline RAG para exibição (texto + documentos fonte)."""
     if isinstance(response_data, dict):
         answer = response_data.get("result", "Resposta não encontrada.")
         source_docs = response_data.get("source_documents", [])
@@ -530,19 +428,7 @@ def initialize_rag_pipeline(
     max_new_tokens: int,
 ):
     """
-    Inicializa o pipeline RAG (com cache) para melhorar performance.
-
-    Componentes:
-    1) Embeddings (MiniLM): transforma texto em vetores.
-    2) FAISS: indexa vetores e permite busca por similaridade.
-    3) Retriever: escolhe os Top-k trechos mais relevantes.
-    4) LLM (FLAN-T5): gera a resposta usando os trechos recuperados.
-
-    Args:
-        docs_texts: Lista de textos (strings) a indexar.
-        retriever_k: Quantidade de trechos recuperados (Top-k).
-        temperature: Controle de aleatoriedade do texto gerado.
-        max_new_tokens: Tamanho máximo da resposta.
+    Inicializa o pipeline RAG (com cache).
 
     Returns:
         (qa_chain, vectorstore, retriever, embeddings)
@@ -554,23 +440,19 @@ def initialize_rag_pipeline(
         from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline as hf_pipeline
         from langchain_community.llms import HuggingFacePipeline
 
-        # 1) Embeddings
         embeddings = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2",
             model_kwargs={"device": "cpu"},
             encode_kwargs={"normalize_embeddings": True},
         )
 
-        # 2) Vector store (FAISS)
         vectorstore = FAISS.from_texts(docs_texts, embeddings)
 
-        # 3) Retriever
         retriever = vectorstore.as_retriever(
             search_type="similarity",
             search_kwargs={"k": int(retriever_k)},
         )
 
-        # 4) LLM (FLAN-T5)
         model_name = "google/flan-t5-base"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
@@ -587,23 +469,13 @@ def initialize_rag_pipeline(
 
         llm = HuggingFacePipeline(pipeline=gen_pipeline)
 
-        # 5) Chain (RAG)
-        described_prompt = (
-            "Você é um assistente didático. Responda de forma clara, objetiva e baseada nos trechos fornecidos. "
-            "Se a informação não estiver nos trechos, diga que não encontrou evidência suficiente."
-        )
-
         qa_chain = RetrievalQA.from_chain_type(
             llm=llm,
             chain_type="stuff",
             retriever=retriever,
             return_source_documents=True,
             verbose=False,
-            chain_type_kwargs={"prompt": None},  # Mantemos padrão; didática focada no fluxo
         )
-
-        # Dica: em um próximo passo didático, você pode customizar prompts com LangChain templates.
-        _ = described_prompt  # mantém a ideia documentada sem “poluir” execução
 
         return qa_chain, vectorstore, retriever, embeddings
 
@@ -613,13 +485,7 @@ def initialize_rag_pipeline(
 
 
 def ensure_pipeline_ready() -> None:
-    """
-    Garante que o pipeline esteja inicializado no estado da sessão.
-
-    Heurística (Nielsen):
-    - Visibilidade do status do sistema.
-    - Prevenção de erros: não deixa o usuário “cair lembrar” de carregar pipeline.
-    """
+    """Garante que o pipeline esteja inicializado no estado da sessão."""
     if st.session_state.qa_chain is not None:
         return
 
@@ -650,17 +516,7 @@ def ensure_pipeline_ready() -> None:
 # =============================================================================
 
 def render_sidebar() -> None:
-    """
-    Barra lateral com:
-    - Navegação
-    - Configurações (Top-k, temperatura, tokens)
-    - Status do sistema
-
-    Heurísticas (Nielsen) atendidas:
-    - Consistência e padrões (mesma navegação sempre).
-    - Controle e liberdade (recarregar, reset, aplicar configurações).
-    - Ajuda e documentação (atalhos para Glossário).
-    """
+    """Barra lateral com navegação, configurações e status do sistema."""
     with st.sidebar:
         st.markdown(f"### {APP_SHORT}")
         st.caption("Navegação e configurações")
@@ -699,7 +555,6 @@ def render_sidebar() -> None:
                 st.session_state.temperature = float(new_temp)
                 st.session_state.max_new_tokens = int(new_tokens)
 
-                # Para aplicar de fato no LLM (temp/tokens), reinicializamos o pipeline (custo: tempo).
                 st.cache_resource.clear()
                 st.session_state.qa_chain = None
                 st.session_state.toast = "Configurações aplicadas. O pipeline será recarregado."
@@ -707,7 +562,6 @@ def render_sidebar() -> None:
 
         st.markdown("---")
 
-        # Status do sistema
         stats = get_system_stats()
         safety = check_system_safety()
 
@@ -728,18 +582,9 @@ def render_sidebar() -> None:
 # =============================================================================
 
 def page_chat() -> None:
-    """
-    Página de chat (pergunta -> busca -> resposta + evidências).
-
-    Heurísticas (Nielsen) destacadas:
-    - Visibilidade do status: spinner, tempo de resposta, fontes.
-    - Reconhecimento em vez de memorização: perguntas de exemplo.
-    - Ajuda e documentação: links para Glossário.
-    - Design minimalista: sem excesso de elementos decorativos.
-    """
+    """Página de chat (pergunta -> resposta + evidências)."""
     render_header()
 
-    # Feedback pós-rerun
     if st.session_state.toast:
         st.info(st.session_state.toast)
         st.session_state.toast = None
@@ -819,10 +664,9 @@ def page_chat() -> None:
                         pills=["Resposta", "Tempo", "Clareza"],
                     )
 
-                    # Evidências (progressive disclosure — Nielsen: minimalist + ajuda quando necessário)
                     if source_docs:
                         st.subheader("Evidências utilizadas (trechos recuperados)")
-                        st.caption("Mostramos os trechos que mais contribuíram para a resposta. Isso ajuda a aprender o fluxo do RAG.")
+                        st.caption("Mostramos os trechos que mais contribuíram para a resposta.")
 
                         for idx, doc in enumerate(source_docs[: min(3, len(source_docs))], 1):
                             with st.expander(f"Trecho {idx}", expanded=(idx == 1)):
@@ -832,26 +676,26 @@ def page_chat() -> None:
                     logger.error(f"Erro ao responder: {e}")
                     st.error("Ocorreu um erro ao gerar a resposta. Tente novamente ou reduza documentos.")
 
-
     with col_right:
-        # Estatísticas rápidas (visibilidade do status)
         history = st.session_state.query_history
         total = len(history)
 
+        # ✅ Correção do bug: nunca formata None como float
         if total:
             avg = sum(x["time"] for x in history) / total
             last = history[-1]["time"]
+            avg_txt = f"{avg:.2f}s"
+            last_txt = f"{last:.2f}s"
         else:
-            avg, last = None, None
+            avg_txt = "-"
+            last_txt = "-"
 
         card(
             "Métricas da sessão",
             f"""
             - Total de perguntas: **{total}**
-            - Tempo médio: **{avg:.2f}s**  \n
-              {"" if avg is not None else "-"}
-            - Última pergunta: **{last:.2f}s**  \n
-              {"" if last is not None else "-"}
+            - Tempo médio: **{avg_txt}**
+            - Última pergunta: **{last_txt}**
             """,
             pills=["Observação", "Transparência"],
         )
@@ -867,7 +711,6 @@ def page_chat() -> None:
             pills=["Docs", "Top-k"],
         )
 
-    # Histórico (reconhecimento — permite revisitar sem “lembrar”)
     if st.session_state.query_history:
         st.markdown("---")
         st.subheader("Histórico recente")
@@ -879,14 +722,7 @@ def page_chat() -> None:
 
 
 def page_documents() -> None:
-    """
-    Página de documentos (upload + processamento + atualização do pipeline).
-
-    Heurísticas (Nielsen) destacadas:
-    - Controle e liberdade: reset com confirmação.
-    - Prevenção de erros: limite de chunks, checagem de recursos.
-    - Visibilidade do status: barra de progresso e mensagens claras.
-    """
+    """Página de upload/processamento de PDFs e atualização do pipeline."""
     render_header()
 
     card(
@@ -915,7 +751,7 @@ def page_documents() -> None:
         if process:
             safety = check_system_safety()
             if not safety["overall_safe"]:
-                st.error("Recursos do sistema estão altos. Feche apps e tente novamente, ou envie PDFs menores.")
+                st.error("Recursos do sistema estão altos. Envie PDFs menores ou feche outros apps.")
                 return
 
             progress = st.progress(0)
@@ -934,10 +770,9 @@ def page_documents() -> None:
                 for d in docs:
                     new_texts.append(d.page_content)
 
-                # checagem de segurança contínua
                 safety_now = check_system_safety()
                 if not safety_now["ram_safe"]:
-                    warnings_all.append("Uso de RAM alto: interrompemos processamento para evitar travamento.")
+                    warnings_all.append("Uso de RAM alto: interrompemos o processamento para evitar travamento.")
                     break
 
                 progress.progress(int(i / len(uploaded_files) * 100) / 100)
@@ -955,7 +790,6 @@ def page_documents() -> None:
             updated_docs = (st.session_state.docs or []) + new_texts
 
             if save_custom_docs(updated_docs):
-                # Recarrega pipeline com cache limpo
                 st.cache_resource.clear()
                 st.session_state.qa_chain = None
                 st.session_state.docs = updated_docs
@@ -963,12 +797,11 @@ def page_documents() -> None:
                 status.text("Concluído.")
                 st.success(f"{len(new_texts)} trechos adicionados à base.")
             else:
-                st.error("Não foi possível salvar os documentos. Verifique permissões de escrita em disco.")
+                st.error("Não foi possível salvar os documentos. Verifique permissões de escrita.")
                 return
 
     st.markdown("---")
 
-    # Info base atual
     stats = get_system_stats()
     limits = get_theoretical_limits()
 
@@ -992,7 +825,6 @@ def page_documents() -> None:
 
     st.markdown("---")
 
-    # Reset com confirmação (controle e liberdade + prevenção de erros)
     st.subheader("Gerenciamento avançado")
     col_a, col_b = st.columns(2)
 
@@ -1019,22 +851,14 @@ def page_documents() -> None:
 
 
 def page_glossary_help() -> None:
-    """
-    Página de ajuda: glossário + heurísticas de Nielsen + Gestalt.
-
-    Requisito 3 (Gestalt):
-    - Explicamos e também aplicamos no layout (cards, agrupamentos, proximidade, contraste).
-
-    Requisito 4 (termos técnicos):
-    - Glossário com termos “interativos” (k, temperatura, tokens, RAG, etc.).
-    """
+    """Página de ajuda: glossário + heurísticas de Nielsen + Gestalt."""
     render_header()
 
     card(
         "Glossário (termos técnicos do aplicativo)",
         """
         Selecione um termo e veja **o que é**, **onde aparece no app** e **por que importa**.
-        A ideia é que o aluno consiga explorar o sistema sem depender de “jargão”.
+        A ideia é permitir exploração sem depender de “jargão”.
         """,
         pills=["Didático", "Autoexplicativo"],
     )
@@ -1042,7 +866,6 @@ def page_glossary_help() -> None:
     term = st.selectbox("Escolha um termo", list(GLOSSARY.keys()))
     info = GLOSSARY[term]
 
-    st.markdown("#### Termo selecionado")
     card(
         term,
         f"""
@@ -1078,7 +901,7 @@ def page_glossary_help() -> None:
         **Proximidade:** itens relacionados ficam juntos (ex.: configurações do pipeline).  
         **Similaridade:** cards e métricas têm o mesmo estilo, facilitando leitura rápida.  
         **Região comum:** blocos com borda e fundo agrupam conceitos (ex.: “Resposta” e “Evidências”).  
-        **Figura-fundo:** contraste alto (texto claro sobre fundo escuro) melhora legibilidade.  
+        **Figura-fundo:** contraste alto melhora legibilidade.  
         **Continuidade:** fluxo de leitura vertical (Pergunta → Resposta → Evidências → Histórico).  
         **Fechamento:** expanders permitem “ver mais” sem poluir a tela (progressive disclosure).
         """,
@@ -1091,12 +914,11 @@ def page_glossary_help() -> None:
 # =============================================================================
 
 def main() -> None:
-    """Ponto de entrada do app."""
+    """Ponto de entrada do aplicativo."""
     inject_minimal_css()
     init_session_state()
     render_sidebar()
 
-    # Pipeline pronto antes de qualquer página (prevenção de erros)
     ensure_pipeline_ready()
 
     if st.session_state.page == "Chat":
