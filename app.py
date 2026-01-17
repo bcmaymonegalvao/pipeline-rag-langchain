@@ -162,7 +162,7 @@ def inject_minimal_css() -> None:
         unsafe_allow_html=True,
         /* --- Evitar que o header do Streamlit cubra o conteúdo --- */
         header[data-testid="stHeader"]{
-          background: transparent;   /* não “pinta” por cima do título */
+          background: transparent;   /* não pinta por cima do título */
         }
         
         /* Empurra a área principal para baixo, evitando corte do título */
