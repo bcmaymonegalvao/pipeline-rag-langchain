@@ -131,7 +131,7 @@ export OPENAI_API_KEY=sk-...  # Windows PowerShell: $env:OPENAI_API_KEY="sk-..."
 jupyter notebook notebooks/pipeline_rag_langchain.ipynb
 
 # Ou abra diretamente no Google Colab
-# https://colab.research.google.com/github/seu-usuario/pipeline-rag-langchain/blob/main/notebooks/pipeline_rag_langchain.ipynb
+# https://colab.research.google.com/github/seu-usuario/miguel-chatbot-didatico/blob/main/notebooks/pipeline_rag_langchain.ipynb
 ```
 
 ---
