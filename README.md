@@ -1,4 +1,4 @@
-# 🚀 Pipeline RAG LangChain
+# 🚀 MIGUEL - Chatbot didático
 
 > ✨ **Pipeline didático de Retrieval-Augmented Generation (RAG)** construído com **LangChain** — focado em um pipeline *mínimo* e reproduzível: **HuggingFace embeddings → FAISS retriever → LLM local (FLAN‑T5)**, com fallback opcional para OpenAI. Ideal para ensinar conceitos modernos de RAG passo a passo.
 
@@ -105,8 +105,8 @@ flowchart TB
 
 ```bash
 # Clone o repositório
-git clone https://github.com/seu-usuario/pipeline-rag-langchain.git
-cd pipeline-rag-langchain
+git clone https://github.com/seu-usuario/miguel-chatbot-didatico.git
+cd "MIGUEL - Chatbot didático"
 
 # Crie ambiente virtual (opcional mas recomendado)
 python -m venv .venv
@@ -219,7 +219,7 @@ for pergunta, termo_esperado in perguntas_teste:
 ## 📁 Estrutura do Projeto
 
 ```
-pipeline-rag-langchain/
+MIGUEL - Chatbot didático/
 ├── 📁 config/                  # Configurações Hydra
 │   ├── main.yaml              # Configuração principal
 │   ├── model/                 # Parâmetros de modelos
