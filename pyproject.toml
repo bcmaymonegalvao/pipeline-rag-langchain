@@ -1,6 +1,6 @@
 
 [tool.poetry]
-name = "pipeline-rag-langchain"
+name = "miguel-chatbot-didatico"
 version = "0.1.0"
 description = ""
 authors = ["Bruno César Maymone Galvão"]
