@@ -11,17 +11,9 @@ com componentes 100% locais e gratuitos:
 Objetivo: permitir que estudantes e professores aprendam IA “por dentro”, personalizando e
 observando as etapas do pipeline, com uma interface clara e documentação acessível.
 
-Requisitos atendidos (resumo):
-1) Nome alterado para “Modelo Interativo Generativo de Linguagem para Uso Educacional Livre”.
-2) Interface aprimorada com foco em usabilidade (Heurísticas de Nielsen).
-3) Princípios da Gestalt expostos e aplicados no layout.
-4) Seção de Glossário com termos técnicos usados/interativos.
-5) Docstrings didáticas adicionadas/melhoradas.
-6) Sem emoji de foguete no título.
-7) Paleta minimalista (azul escuro + branco + cinza).
-
-Correção adicional:
-- Evita TypeError ao formatar métricas quando o histórico ainda está vazio.
+Notas:
+- Tema: paleta clara (principal) com acentos escuros (auxiliares).
+- Evita TypeError ao formatar métricas quando o histórico está vazio.
 """
 
 from __future__ import annotations
@@ -57,53 +49,73 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# Estilo (paleta minimalista) + utilidades de UI
+# Estilo (CSS) + utilidades de UI
 # =============================================================================
 
 def inject_minimal_css() -> None:
-    """Injeta CSS minimalista e consistente (Gestalt + legibilidade)."""
+    """Tema claro (principal) com acentos escuros (auxiliares) e alto contraste no título."""
     st.markdown(
         """
         <style>
           :root{
-            --bg: #0b1220;
-            --panel: #0f172a;
-            --text: #e5e7eb;
-            --muted: #9ca3af;
-            --line: #24314a;
-            --accent: #2563eb;
-            --ok: #16a34a;
-            --warn: #f59e0b;
-            --err: #ef4444;
-            --card: #0c1528;
+            /* Base clara */
+            --bg: #f7f9fc;
+            --panel: #ffffff;
+            --card: #ffffff;
+
+            /* Texto */
+            --text: #0b1220;
+            --muted: #475569;
+
+            /* Linhas/bordas */
+            --line: #d6deea;
+
+            /* Acento (auxiliar escuro) */
+            --accent: #1e3a8a;       /* azul escuro */
+            --accentSoft: #e8f0ff;   /* azul bem claro */
+
+            /* Estados */
+            --ok: #15803d;
+            --warn: #b45309;
+            --err: #b91c1c;
           }
 
+          /* Fundo geral */
           .stApp {
-            background: linear-gradient(180deg, var(--bg) 0%, #070b14 100%);
+            background: var(--bg);
             color: var(--text);
           }
 
+          /* Sidebar clara */
+          section[data-testid="stSidebar"]{
+            background: var(--panel);
+            border-right: 1px solid var(--line);
+          }
+
+          /* Título com contraste alto */
           .miguel-title {
-            font-size: 2.1rem;
-            font-weight: 800;
+            font-size: 2.2rem;
+            font-weight: 900;
             letter-spacing: -0.02em;
             text-align: left;
-            margin: 0.25rem 0 0.2rem 0;
+            margin: 0.25rem 0 0.25rem 0;
             color: var(--text);
           }
 
           .miguel-subtitle {
             color: var(--muted);
             font-size: 1.05rem;
-            margin: 0 0 1.25rem 0;
+            margin: 0 0 1.15rem 0;
           }
 
+          /* Cards */
           .miguel-card {
-            background: rgba(12, 21, 40, 0.95);
+            background: var(--card);
             border: 1px solid var(--line);
             border-radius: 14px;
             padding: 1rem 1.1rem;
             margin: 0.6rem 0;
+            box-shadow: 0 1px 0 rgba(2, 6, 23, 0.03);
           }
 
           .miguel-card h3, .miguel-card h4 {
@@ -116,26 +128,35 @@ def inject_minimal_css() -> None:
             color: var(--muted);
           }
 
+          /* Pills */
           .miguel-pill {
             display: inline-block;
             padding: 0.15rem 0.55rem;
             border-radius: 999px;
             border: 1px solid var(--line);
-            background: rgba(37, 99, 235, 0.10);
-            color: var(--text);
+            background: var(--accentSoft);
+            color: var(--accent);
+            font-weight: 600;
             font-size: 0.85rem;
             margin-right: 0.35rem;
           }
 
+          /* Status */
           .state-ok    { color: var(--ok); }
           .state-warn  { color: var(--warn); }
           .state-err   { color: var(--err); }
 
-          a { color: #93c5fd; }
+          /* Links */
+          a { color: var(--accent); }
 
-          .block-container {
-            padding-top: 1.0rem;
+          /* Botões */
+          .stButton > button {
+            border-radius: 10px;
+            border: 1px solid var(--line);
           }
+
+          /* Espaçamento superior */
+          .block-container { padding-top: 1.0rem; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -146,6 +167,10 @@ def render_header() -> None:
     """Renderiza cabeçalho do app (sem emoji de foguete)."""
     st.markdown(f"<div class='miguel-title'>{APP_NAME}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='miguel-subtitle'>{APP_SUBTITLE}</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<hr style='border:none;border-top:1px solid #d6deea;margin:0.6rem 0 1.0rem 0;'>",
+        unsafe_allow_html=True,
+    )
 
 
 def card(title: str, body_md: str, pills: Optional[List[str]] = None) -> None:
@@ -182,9 +207,7 @@ CUSTOM_DOCS_PATH = os.path.join(DATA_DIR, "custom_docs.pkl")
 
 
 def init_session_state() -> None:
-    """
-    Inicializa variáveis em st.session_state para consistência e prevenção de erros.
-    """
+    """Inicializa variáveis em st.session_state para consistência e prevenção de erros."""
     st.session_state.setdefault("page", "Chat")
     st.session_state.setdefault("query_history", [])
     st.session_state.setdefault("docs", [])
@@ -193,6 +216,7 @@ def init_session_state() -> None:
     st.session_state.setdefault("retriever", None)
     st.session_state.setdefault("embeddings", None)
 
+    # Parâmetros interativos
     st.session_state.setdefault("retriever_k", 3)
     st.session_state.setdefault("max_new_tokens", 512)
     st.session_state.setdefault("temperature", 0.7)
@@ -288,7 +312,7 @@ GLOSSARY: Dict[str, Dict[str, str]] = {
     "max_new_tokens": {
         "o_que_e": "Limite máximo do tamanho da resposta (em tokens).",
         "onde_aparece_no_app": "Configuração na barra lateral (Configurações do pipeline).",
-        "por_que_importa": "Controla custo de tempo/memória e evita respostas longas demais.",
+        "por_que_importa": "Controla tempo/uso de recursos e evita respostas longas demais.",
     },
 }
 
@@ -512,7 +536,7 @@ def ensure_pipeline_ready() -> None:
 
 
 # =============================================================================
-# Sidebar (navegação, configurações, ajuda)
+# Sidebar (navegação, configurações, status)
 # =============================================================================
 
 def render_sidebar() -> None:
@@ -570,7 +594,7 @@ def render_sidebar() -> None:
         st.caption("Recursos locais (para evitar travamentos).")
 
         st.write(f"RAM: {stats['ram_used_gb']:.1f} / {stats['ram_total_gb']:.1f} GB")
-        st.write(f"Documentos indexados: {int(stats['total_docs']):,}")
+        st.write(f"Documentos indexados: {len(st.session_state.docs):,}")
         st.write(f"Vetores (FAISS): {int(stats['total_vectors']):,}")
 
         if not safety["overall_safe"]:
@@ -654,11 +678,9 @@ def page_chat() -> None:
                     card(
                         "Resposta",
                         f"""
-                        **Texto gerado:**
+                        <b>Texto gerado:</b><br/>
                         {answer}
-
-                        <br/>
-
+                        <br/><br/>
                         <span class="miguel-pill">Tempo: {elapsed:.2f}s</span>
                         """,
                         pills=["Resposta", "Tempo", "Clareza"],
@@ -680,7 +702,7 @@ def page_chat() -> None:
         history = st.session_state.query_history
         total = len(history)
 
-        # ✅ Correção do bug: nunca formata None como float
+        # Evita formatação de None como float
         if total:
             avg = sum(x["time"] for x in history) / total
             last = history[-1]["time"]
@@ -693,9 +715,9 @@ def page_chat() -> None:
         card(
             "Métricas da sessão",
             f"""
-            - Total de perguntas: **{total}**
-            - Tempo médio: **{avg_txt}**
-            - Última pergunta: **{last_txt}**
+            - Total de perguntas: <b>{total}</b><br/>
+            - Tempo médio: <b>{avg_txt}</b><br/>
+            - Última pergunta: <b>{last_txt}</b>
             """,
             pills=["Observação", "Transparência"],
         )
@@ -703,10 +725,9 @@ def page_chat() -> None:
         card(
             "Base de conhecimento",
             f"""
-            - Documentos indexados: **{len(st.session_state.docs)}**
-            - Top-k atual: **{st.session_state.retriever_k}**
-
-            Dica: envie PDFs na aba **Documentos** para enriquecer a base.
+            - Documentos indexados: <b>{len(st.session_state.docs)}</b><br/>
+            - Top-k atual: <b>{st.session_state.retriever_k}</b><br/><br/>
+            Dica: envie PDFs na aba <b>Documentos</b> para enriquecer a base.
             """,
             pills=["Docs", "Top-k"],
         )
@@ -857,8 +878,8 @@ def page_glossary_help() -> None:
     card(
         "Glossário (termos técnicos do aplicativo)",
         """
-        Selecione um termo e veja **o que é**, **onde aparece no app** e **por que importa**.
-        A ideia é permitir exploração sem depender de “jargão”.
+        Selecione um termo e veja <b>o que é</b>, <b>onde aparece no app</b> e <b>por que importa</b>.
+        A ideia é permitir exploração sem depender de jargões.
         """,
         pills=["Didático", "Autoexplicativo"],
     )
@@ -869,11 +890,9 @@ def page_glossary_help() -> None:
     card(
         term,
         f"""
-        **O que é:** {info["o_que_e"]}
-
-        **Onde aparece no aplicativo:** {info["onde_aparece_no_app"]}
-
-        **Por que é importante:** {info["por_que_importa"]}
+        <b>O que é:</b> {info["o_que_e"]}<br/><br/>
+        <b>Onde aparece no aplicativo:</b> {info["onde_aparece_no_app"]}<br/><br/>
+        <b>Por que é importante:</b> {info["por_que_importa"]}
         """,
         pills=["Definição", "Uso no app", "Importância"],
     )
@@ -883,14 +902,14 @@ def page_glossary_help() -> None:
     card(
         "Heurísticas de Nielsen (como melhoramos a usabilidade)",
         """
-        **Visibilidade do status:** spinners, progresso e métricas (tempo, docs, vetores).  
-        **Correspondência com o mundo real:** linguagem simples (“trechos”, “evidências”, “pergunta”).  
-        **Controle e liberdade:** reset com confirmação e recarregar pipeline.  
-        **Consistência e padrões:** navegação fixa e rótulos uniformes.  
-        **Prevenção de erros:** limites de chunks e checagem de recursos.  
-        **Reconhecimento em vez de memorização:** exemplos clicáveis e histórico.  
-        **Design minimalista:** cores neutras e menos ruído visual.  
-        **Ajuda e documentação:** este glossário + textos de apoio nas páginas.
+        <b>Visibilidade do status:</b> spinners, progresso e métricas (tempo, docs, vetores).<br/>
+        <b>Correspondência com o mundo real:</b> termos simples (“trechos”, “evidências”, “pergunta”).<br/>
+        <b>Controle e liberdade:</b> reset com confirmação e recarregar pipeline.<br/>
+        <b>Consistência e padrões:</b> navegação fixa e rótulos uniformes.<br/>
+        <b>Prevenção de erros:</b> limites de chunks e checagem de recursos.<br/>
+        <b>Reconhecimento em vez de memorização:</b> exemplos clicáveis e histórico.<br/>
+        <b>Design minimalista:</b> foco no essencial e bom contraste.<br/>
+        <b>Ajuda e documentação:</b> glossário e textos de apoio.
         """,
         pills=["Nielsen", "UX", "Didática"],
     )
@@ -898,12 +917,12 @@ def page_glossary_help() -> None:
     card(
         "Princípios da Gestalt (o que você vê na interface)",
         """
-        **Proximidade:** itens relacionados ficam juntos (ex.: configurações do pipeline).  
-        **Similaridade:** cards e métricas têm o mesmo estilo, facilitando leitura rápida.  
-        **Região comum:** blocos com borda e fundo agrupam conceitos (ex.: “Resposta” e “Evidências”).  
-        **Figura-fundo:** contraste alto melhora legibilidade.  
-        **Continuidade:** fluxo de leitura vertical (Pergunta → Resposta → Evidências → Histórico).  
-        **Fechamento:** expanders permitem “ver mais” sem poluir a tela (progressive disclosure).
+        <b>Proximidade:</b> itens relacionados ficam juntos (ex.: configurações do pipeline).<br/>
+        <b>Similaridade:</b> cards e blocos com o mesmo estilo, facilitando leitura rápida.<br/>
+        <b>Região comum:</b> bordas e fundos agrupam conceitos (ex.: “Resposta” e “Evidências”).<br/>
+        <b>Figura-fundo:</b> contraste alto melhora legibilidade.<br/>
+        <b>Continuidade:</b> fluxo de leitura vertical (Pergunta → Resposta → Evidências → Histórico).<br/>
+        <b>Fechamento:</b> expanders exibem detalhes sem poluir a tela.
         """,
         pills=["Gestalt", "Layout", "Percepção"],
     )
