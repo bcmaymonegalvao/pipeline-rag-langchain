@@ -15,6 +15,41 @@
 
 ---
 
+## 📂 Estrutura do Projeto
+
+```
+Miguel_LLM-educacional/
+├── 📁 .streamlit/          # Configurações do Streamlit
+├── 📁 config/              # Arquivos de configuração
+├── 📁 data/                # Datasets, PDFs e corpus
+├── 📁 docs/                # Documentação
+├── 📁 models/              # Modelos treinados
+├── 📁 notebooks/           # Jupyter notebooks
+├── 📁 src/                 # Código-fonte
+│   ├── 📁 app/             # Aplicação Streamlit
+│   │   ├── 🐍 __init__.py
+│   │   ├── 🐍 app.py           # Interface principal
+│   │   └── 🐍 run_app.py       # Script de execução
+│   ├── 📁 core/            # Lógica RAG/LLM
+│   │   ├── 🐍 __init__.py
+│   │   ├── 🐍 process.py       # Pipeline de processamento
+│   │   ├── 🐍 train_model.py   # Treinamento
+│   │   └── 🐍 utils.py         # Utilitários do core
+│   ├── 📁 utils/           # Utilitários gerais
+│   │   └── 🐍 __init__.py
+│   └── 🐍 __init__.py
+├── 📁 tests/               # Testes unitários
+├── 📦 .gitignore
+├── 📦 .pre-commit-config.yaml
+├── 📝 README.md
+├── 📦 pyproject.toml
+├── 📦 requirements.txt
+└── 📦 runtime.txt
+```
+
+---
+
+
 ## 🎯 Destaques
 
 <table>
