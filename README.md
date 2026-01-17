@@ -1,6 +1,6 @@
 # 🚀 MIGUEL - Chatbot didático
 
-> ✨ **Pipeline didático de Retrieval-Augmented Generation (RAG)** construído com **LangChain** — focado em um pipeline *mínimo* e reproduzível: **HuggingFace embeddings → FAISS retriever → LLM local (FLAN‑T5)**, com fallback opcional para OpenAI. Ideal para ensinar conceitos modernos de RAG passo a passo.
+> ✨ **Pipeline didático de Retrieval-Augmented Generation (RAG)** construído com **LangChain** — focado em um pipeline *mínimo* e reproduzível: **HuggingFace embeddings → FAISS retriever → LLM local (FLAN‑T5)**. Ideal para ensinar conceitos modernos de RAG passo a passo com **controles interativos**.
 
 <div align="center">
 
@@ -9,7 +9,7 @@
 [![HuggingFace](https://img.shields.io/badge/🤗-Transformers-FFB000?style=for-the-badge)](https://huggingface.co/transformers)
 [![FAISS](https://img.shields.io/badge/Vector-FAISS-7B61FF?style=for-the-badge)](https://faiss.ai)
 
-[🎯 Quickstart](#-quickstart) • [📚 Como funciona](#-como-funciona) • [🏗️ Arquitetura](#️-arquitetura) • [📋 Roadmap](#-roadmap)
+[🎯 Quickstart](#-quickstart) • [🎛️ Controles Interativos](#️-controles-interativos) • [📚 Como funciona](#-como-funciona) • [🏗️ Arquitetura](#️-arquitetura) • [📋 Roadmap](#-roadmap)
 
 </div>
 
@@ -24,7 +24,7 @@
 **🎓 Didático**
 - Pipeline minimalista e bem documentado
 - Exemplos práticos passo a passo
-- Ideal para aprender conceitos de RAG
+- **Controles interativos** para experimentar parâmetros
 
 </td>
 <td>
@@ -32,15 +32,15 @@
 **⚡ Performance**
 - Embeddings leves (MiniLM)
 - Índice FAISS otimizado
-- Funciona em CPU ou GPU
+- Funciona em CPU
 
 </td>
 <td>
 
 **🔧 Flexível**
 - LLM local (FLAN-T5) por padrão
-- Fallback opcional para OpenAI
-- Configurações personalizáveis
+- Base de conhecimento expansível via PDFs
+- **Observabilidade didática** (métricas e evidências)
 
 </td>
 </tr>
@@ -54,15 +54,93 @@
 
 | Categoria | Tecnologia | Descrição |
 |-----------|------------|-----------|
-| **🧠 LLM** | FLAN-T5 (local) + OpenAI (opcional) | Modelos de linguagem para geração |
+| **🧠 LLM** | FLAN-T5 (local) | Modelo de linguagem para geração |
 | **🔍 Embeddings** | HuggingFace MiniLM | Embeddings rápidos e leves |
 | **📊 Vector Store** | FAISS | Índice vetorial para busca por similaridade |
 | **⚙️ Framework** | LangChain | Orquestração do pipeline RAG |
+| **🖥️ Interface** | Streamlit | UI interativa com controles didáticos |
 | **🐍 Linguagem** | Python 3.10+ | Linguagem principal do projeto |
 
 </div>
 
-> **💡 Filosofia do projeto**: Orientado ao ensino com documentos pequenos curados, índice FAISS simples e LLM local (FLAN‑T5) para que estudantes possam executar tudo em CPU/GPU (ex: Colab) sem serviços externos.
+> **💡 Filosofia do projeto**: Orientado ao ensino, com base pequena e controlável, índice FAISS simples e LLM local (FLAN-T5) para que estudantes executem tudo sem serviços externos.
+
+---
+
+## 🎛️ Controles Interativos (como usar o aplicativo)
+
+O MIGUEL foi feito para **aprender fazendo**. Na barra lateral do aplicativo (sidebar), você encontra **controles que mudam o comportamento** do RAG e do LLM.
+
+### 🧭 Navegação do aplicativo
+- **Chat**: onde você faz perguntas e vê **resposta + evidências** (trechos recuperados).
+- **Documentos**: onde você **envia PDFs** para expandir a base de conhecimento.
+- **Glossário & Ajuda**: explica todos os termos técnicos do app (RAG, embeddings, FAISS, retriever etc.).
+
+### 1) 🔎 Top-k (k): trechos recuperados
+**O que controla:** quantos trechos do FAISS o sistema recupera para “alimentar” o LLM.
+
+- **k menor (ex.: 1–2)**: respostas podem ficar **rápidas**, mas podem faltar evidências/contexto.
+- **k maior (ex.: 5–8)**: mais contexto, mas pode entrar **ruído** (trechos pouco relevantes).
+
+✅ **Sugestão didática:** faça a mesma pergunta com k=2 e depois k=6 e compare:
+- A resposta mudou?
+- As evidências ficaram mais relevantes?
+
+### 2) 🎚️ Temperatura (criatividade)
+**O que controla:** quanta “aleatoriedade” o LLM usa para gerar respostas.
+
+- **temperatura baixa (0.0–0.3)**: mais **estável** e “objetiva”.
+- **temperatura média (0.4–0.8)**: equilíbrio.
+- **temperatura alta (0.9–1.2)**: mais variação, mas pode aumentar erros.
+
+✅ **Sugestão didática:** pergunte algo conceitual (“o que é RAG?”) e veja se, com temperatura alta, aparecem variações e imprecisões.
+
+### 3) 🧾 Tamanho máximo da resposta (tokens)
+**O que controla:** o quanto o modelo pode escrever.
+
+- **baixo (64–256)**: respostas curtas (bom para exercícios).
+- **alto (512–1024)**: respostas mais longas (pode aumentar tempo de execução).
+
+✅ **Sugestão didática:** combine com Top-k:
+- Se aumentar muito k e tokens, o tempo tende a aumentar.
+
+### 4) ✅ Botão “Aplicar”
+Ao clicar em **Aplicar**, o pipeline é **recarregado** com os novos parâmetros.
+
+> Importante: alterações só entram em vigor após **Aplicar**.
+
+### 5) ↩️ Botão “Padrão”
+Restaura os valores recomendados (baseline didático), por exemplo:
+- **Top-k = 3**
+- **Temperatura = 0.7**
+- **Tokens = 512**
+
+✅ Use “Padrão” quando quiser voltar ao comportamento “normal” após experimentar.
+
+### 6) 📎 Upload de PDFs (aba Documentos)
+**O que acontece ao enviar um PDF:**
+1. O texto é dividido em trechos (chunking)
+2. Cada trecho vira embedding (vetor)
+3. Tudo é indexado no FAISS
+4. No Chat, o retriever busca trechos similares à pergunta
+
+✅ **Exercício sugerido:** envie um PDF sobre um tema e pergunte algo específico do conteúdo.
+- Veja se o app mostra evidências (trechos) que sustentam a resposta.
+
+### 7) 🧾 Evidências (trechos recuperados)
+Após perguntar no Chat, o app mostra:
+- **Resposta gerada**
+- **Evidências utilizadas** (trechos recuperados)
+
+✅ **Objetivo didático:** verificar se a resposta está **ancorada** em evidências, não apenas “criando texto”.
+
+### 8) 📈 Métricas da sessão
+O app exibe:
+- Total de perguntas
+- Tempo médio de resposta
+- Último tempo de resposta
+
+✅ **Experimento:** aumente Top-k e tokens e veja o impacto no tempo.
 
 ---
 
@@ -70,32 +148,23 @@
 
 ```mermaid
 flowchart TB
-    A["📄 Documentos de exemplo"] --> B["🧹 Limpar e dividir em trechos (strings simples)"]
-    B --> C["🔎 Embeddings (MiniLM)"]
+    A["📄 Documentos de exemplo / PDFs"] --> B["🧹 Limpar e dividir em trechos (chunking)"]
+    B --> C["🔎 Representações vetoriais (MiniLM)"]
     C --> D[("📚 Índice FAISS")]
-    D --> E{"Top-k Similaridade (k=2)"}
-    E --> F["🧠 Cadeia de Prompt/Perguntas & Respostas (QA)"]
-    F --> G["🤖 LLM (FLAN-T5)"]
-    G --> H["🧾 Resposta"]
-    
-    classDef primary fill:#6c5ce7,stroke:#5f3dc4,stroke-width:2px,color:#fff
-    classDef secondary fill:#a29bfe,stroke:#6c5ce7,stroke-width:2px,color:#fff
-    classDef accent fill:#fd79a8,stroke:#e84393,stroke-width:2px,color:#fff
-    classDef success fill:#00b894,stroke:#00a085,stroke-width:2px,color:#fff
-    
-    class A,H accent
-    class B,C,F,G primary
-    class D,E secondary
+    D --> E{"Top-k Similaridade (k)"} 
+    E --> F["🧠 Cadeia de Perguntas & Respostas (QA)"]
+    F --> G["🤖 LLM local (FLAN-T5)"]
+    G --> H["🧾 Resposta + Evidências"]
 ```
 
 ### 🔧 Componentes Principais
 
-- **📝 Corpus Minimalista**: Lista pequena de strings sobre churn, NPS, LangChain, RAG e embeddings
-- **🧮 Embeddings**: `sentence-transformers/all-MiniLM-L6-v2` (rápido e leve)
-- **🗃️ Índice Vetorial**: FAISS para busca por similaridade
-- **🔍 Retriever**: Top-k similarity (k=2) configurável
-- **🤖 LLM**: FLAN-T5 local via transformers pipeline
-- **🔗 Chain**: RetrievalQA usando LangChain
+- **📝 Corpus**: strings de exemplo + documentos enviados (PDFs)
+- **🧮 Embeddings**: `sentence-transformers/all-MiniLM-L6-v2`
+- **🗃️ Vector Store**: FAISS
+- **🔍 Retriever**: busca por similaridade com Top-k configurável
+- **🤖 LLM**: FLAN-T5 local via `transformers`
+- **🔗 Chain**: RetrievalQA (LangChain)
 
 ---
 
@@ -106,33 +175,24 @@ flowchart TB
 ```bash
 # Clone o repositório
 git clone https://github.com/seu-usuario/miguel-chatbot-didatico.git
-cd "MIGUEL - Chatbot didático"
+cd miguel-chatbot-didatico
 
-# Crie ambiente virtual (opcional mas recomendado)
+# Ambiente virtual
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-# Instale dependências
+# Dependências
 pip install -U pip
-pip install faiss-cpu sentence-transformers langchain langchain-community transformers torch
+pip install streamlit faiss-cpu sentence-transformers langchain langchain-community transformers torch pypdf
 ```
 
-### 2️⃣ Configuração (Opcional)
+### 2️⃣ Execução (Streamlit)
 
 ```bash
-# Para habilitar fallback OpenAI
-export OPENAI_API_KEY=sk-...  # Windows PowerShell: $env:OPENAI_API_KEY="sk-..."
+streamlit run app.py
 ```
 
-### 3️⃣ Execução
-
-```bash
-# Execute o notebook
-jupyter notebook notebooks/pipeline_rag_langchain.ipynb
-
-# Ou abra diretamente no Google Colab
-# https://colab.research.google.com/github/seu-usuario/miguel-chatbot-didatico/blob/main/notebooks/pipeline_rag_langchain.ipynb
-```
+Abra no navegador o endereço exibido no terminal (geralmente `http://localhost:8501`).
 
 ---
 
@@ -140,194 +200,43 @@ jupyter notebook notebooks/pipeline_rag_langchain.ipynb
 
 ### 🔄 Fluxo do Pipeline
 
-1. **📄 Corpus de Exemplo**: Documentos pequenos sobre conceitos de ML/AI
-2. **🔤 Embeddings**: Conversão de texto para vetores usando MiniLM
-3. **🗄️ Indexação**: Criação do índice FAISS para busca vetorial
-4. **🔍 Retrieval**: Busca dos k documentos mais similares
-5. **🧠 Geração**: LLM processa contexto + pergunta → resposta
-6. **✅ Resposta**: Saída final formatada
-
-### 💻 Exemplo de Código
-
-```python
-# 1) Documentos de exemplo
-docs = [
-    "O churn é o cancelamento de clientes...",
-    "NPS, ou Net Promoter Score, mede satisfação...",
-    "LangChain é uma biblioteca para aplicações LLM...",
-    "RAG combina recuperação de informação com geração...",
-]
-
-# 2) Setup do pipeline
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
-from langchain.chains import RetrievalQA
-
-# Embeddings + Índice FAISS
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-vectorstore = FAISS.from_texts(docs, embeddings)
-retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
-
-# LLM Local (FLAN-T5)
-from transformers import pipeline
-from langchain_community.llms import HuggingFacePipeline
-
-gen_pipeline = pipeline("text2text-generation", model="google/flan-t5-base", max_new_tokens=256)
-llm = HuggingFacePipeline(pipeline=gen_pipeline)
-
-# 3) Chain RAG
-qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
-
-# 4) Fazer perguntas
-resposta = qa_chain.invoke({"query": "O que significa churn?"})
-print(resposta["result"])
-```
+1. **📄 Documentos**: base inicial + PDFs enviados
+2. **🔤 Embeddings**: texto → vetores (MiniLM)
+3. **🗄️ Indexação**: vetores → índice FAISS
+4. **🔍 Retrieval**: retorna Top-k trechos similares
+5. **🧠 Geração**: LLM gera resposta usando o contexto
+6. **✅ Saída didática**: resposta + evidências + métricas
 
 ---
 
-## 🧪 Avaliação e Testes
+## 🧪 Avaliação e Testes (didático)
 
 ### 🎯 Métricas Qualitativas
+- **Groundedness**: a resposta reflete evidências?
+- **Relevância**: os trechos recuperados fazem sentido?
+- **Coerência**: a resposta está clara e consistente?
 
-- **Groundedness**: Respostas refletem documentos recuperados?
-- **Relevância**: Retrieval retorna contexto apropriado?
-- **Fluência**: Respostas são coerentes e bem formadas?
-
-### ⏱️ Benchmark Rápido
-
-```python
-import time
-
-perguntas_teste = [
-    ("O que significa churn?", "churn"),
-    ("Como funciona RAG?", "RAG"),
-    ("O que é NPS?", "NPS"),
-]
-
-for pergunta, termo_esperado in perguntas_teste:
-    inicio = time.time()
-    resultado = qa_chain.invoke({"query": pergunta})
-    tempo = time.time() - inicio
-    
-    print(f"❓ {pergunta}")
-    print(f"✅ {resultado['result']}")
-    print(f"⏱️ {tempo:.2f}s\n")
-```
-
----
-
-## 📁 Estrutura do Projeto
-
-```
-MIGUEL - Chatbot didático/
-├── 📁 config/                  # Configurações Hydra
-│   ├── main.yaml              # Configuração principal
-│   ├── model/                 # Parâmetros de modelos
-│   └── process/               # Parâmetros de processamento
-├── 📁 data/                   # Dados do projeto
-│   ├── raw/                   # Dados brutos
-│   ├── processed/             # Dados processados
-│   └── final/                 # Dados finais
-├── 📁 notebooks/              # Jupyter notebooks
-│   └── pipeline_rag_langchain.ipynb
-├── 📁 src/                    # Código fonte
-│   ├── __init__.py
-│   ├── process.py
-│   ├── train_model.py
-│   └── utils.py
-├── 📁 tests/                  # Testes automatizados
-├── 📁 docs/                   # Documentação
-├── 📁 models/                 # Modelos salvos
-├── pyproject.toml             # Dependências Poetry
-├── .pre-commit-config.yaml    # Configurações pre-commit
-└── README.md                  # Este arquivo
-```
-
----
-
-## 🛠️ Ferramentas Utilizadas
-
-<details>
-<summary><b>🔧 Clique para ver todas as ferramentas</b></summary>
-
-| Ferramenta | Propósito | Documentação |
-|------------|-----------|--------------|
-| **Poetry** | Gerenciamento de dependências | [📖 Guia Poetry](https://python-poetry.org/) |
-| **Hydra** | Gerenciamento de configurações | [📖 Hydra Docs](https://hydra.cc/) |
-| **Pre-commit** | Formatação automática de código | [📖 Pre-commit Hooks](https://pre-commit.com/) |
-| **Pdoc** | Documentação automática da API | [📖 Pdoc](https://pdoc.dev/) |
-| **Pytest** | Framework de testes | [📖 Pytest](https://pytest.org/) |
-
-</details>
-
----
-
-## 🚀 Setup Desenvolvimento
-
-### 1️⃣ Ambiente Poetry
-
-```bash
-# Instalar Poetry
-curl -sSL https://install.python-poetry.org | python3 -
-
-# Ativar ambiente virtual
-poetry shell
-
-# Instalar dependências
-poetry install              # Todas as dependências
-poetry install --only main  # Apenas produção
-```
-
-### 2️⃣ Pre-commit Hooks
-
-```bash
-# Configurar pre-commit
-poetry run pre-commit install
-
-# Executar manualmente
-poetry run pre-commit run --all-files
-```
-
-### 3️⃣ Documentação
-
-```bash
-# Gerar documentação estática
-poetry run pdoc src -o docs
-
-# Servidor de documentação (http://localhost:8080)
-poetry run pdoc src --http localhost:8080
-```
-
-### 4️⃣ Configurações com Hydra
-
-```bash
-# Ver configurações disponíveis
-poetry run python src/process.py --help
-
-# Override configurações
-poetry run python src/process.py data.raw=novo_arquivo.csv model=model2
-```
+### 🧩 Atividades sugeridas (para sala de aula)
+1. Perguntar a mesma coisa variando **Top-k**
+2. Comparar respostas com **temperatura baixa vs alta**
+3. Enviar um PDF e testar perguntas específicas do documento
+4. Verificar se as evidências sustentam a resposta
 
 ---
 
 ## 📋 Roadmap
 
 ### 🎯 Próximas Features
-
-- [ ] **🔄 MMR Retriever**: Opção de Maximum Marginal Relevance
-- [ ] **📄 Loaders**: Suporte para PDF e Markdown
-- [ ] **💾 Persistência**: Save/load do índice FAISS
-- [ ] **🌐 OpenAI Integration**: Path completo com embeddings OpenAI
-- [ ] **📊 Métricas**: Dashboard de avaliação de performance
-- [ ] **🎨 Streamlit Demo**: Interface web interativa
-- [ ] **📱 Colab Badge**: Botão de abertura direta no Colab
+- [ ] **MMR Retriever** (diversidade de trechos)
+- [ ] **Persistência do índice FAISS** (save/load)
+- [ ] **Mais loaders** (Markdown, TXT)
+- [ ] **Dashboard de avaliação** (métricas e logs)
 
 ### 🎨 Melhorias de UX
-
-- [ ] **📈 Logging**: Sistema de logs estruturado
-- [ ] **⚡ Cache**: Cache de embeddings para desenvolvimento
-- [ ] **🐳 Docker**: Containerização completa
-- [ ] **📋 Templates**: Templates para diferentes tipos de documentos
+- [ ] **Logs estruturados**
+- [ ] **Cache de embeddings**
+- [ ] **Docker**
+- [ ] **Templates didáticos** (exercícios prontos)
 
 ---
 
@@ -335,17 +244,17 @@ poetry run python src/process.py data.raw=novo_arquivo.csv model=model2
 
 Contribuições são bem-vindas! Por favor:
 
-1. **🍴 Fork** o projeto
-2. **🌟 Crie** uma feature branch (`git checkout -b feature/AmazingFeature`)
-3. **💾 Commit** suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. **📤 Push** para a branch (`git push origin feature/AmazingFeature`)
-5. **🔄 Abra** um Pull Request
+1. Fork o projeto
+2. Crie uma branch (`git checkout -b feature/minha-feature`)
+3. Commit (`git commit -m "Minha melhoria"`)
+4. Push (`git push origin feature/minha-feature`)
+5. Abra um Pull Request
 
 ---
 
 ## 📄 Licença
 
-Este projeto está licenciado sob a MIT License - veja o arquivo [LICENSE](LICENSE) para detalhes.
+Este projeto está licenciado sob a MIT License — veja [LICENSE](LICENSE).
 
 ---
 
@@ -354,14 +263,4 @@ Este projeto está licenciado sob a MIT License - veja o arquivo [LICENSE](LICEN
 - **🤗 HuggingFace** pelos modelos e transformers
 - **🦜 LangChain** pelo framework RAG
 - **🔍 FAISS** pela busca vetorial eficiente
-- **🐍 Python Community** pelas bibliotecas incríveis
-
----
-
-<div align="center">
-
-**⭐ Se este projeto te ajudou, deixe uma estrela!**
-
-Made with ❤️ and lots of ☕
-
-</div>
+- **🐍 Python Community** pelas bibliotecas
