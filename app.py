@@ -160,6 +160,27 @@ def inject_minimal_css() -> None:
         </style>
         """,
         unsafe_allow_html=True,
+        /* --- Evitar que o header do Streamlit cubra o conteúdo --- */
+        header[data-testid="stHeader"]{
+          background: transparent;   /* não “pinta” por cima do título */
+        }
+        
+        /* Empurra a área principal para baixo, evitando corte do título */
+        div[data-testid="stAppViewContainer"] > .main {
+          padding-top: 4.25rem;
+        }
+        
+        /* Mantém o espaçamento interno do container (conteúdo) */
+        .block-container {
+          padding-top: 0.75rem;
+        }
+        
+        /* Em telas menores, o header pode ser maior */
+        @media (max-width: 768px){
+        div[data-testid="stAppViewContainer"] > .main {
+            padding-top: 5.0rem;
+          }
+        }
     )
 
 
